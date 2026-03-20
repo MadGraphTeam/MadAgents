@@ -53,7 +53,11 @@ MadAgents can be used in two modes. Both run inside an Apptainer container.
 
 ### 1) Get the code
 
-Clone or download this repository.
+Clone or download this repository, then make the scripts executable:
+
+```bash
+chmod +x madrun_code.sh cleanup_madrun.sh image/create_image.sh image/create_overlay.sh
+```
 
 ### 2) Build image + overlay
 
@@ -90,7 +94,11 @@ To resume or continue a previous session:
 
 ### 1) Get the code
 
-Clone or download this repository.
+Clone or download this repository, then make the scripts executable:
+
+```bash
+chmod +x madrun_api.sh cleanup_madrun.sh image/create_image.sh image/create_overlay.sh
+```
 
 ### 2) Configure
 
