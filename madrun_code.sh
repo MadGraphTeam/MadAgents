@@ -22,6 +22,7 @@ fi
 # its own authentication.  Unset them so they don't leak into subprocesses.
 unset OPENAI_API_KEY 2>/dev/null || true
 unset ANTHROPIC_API_KEY 2>/dev/null || true
+unset LLM_API_KEY 2>/dev/null || true
 
 # ── Shared directory structure ───────────────────────────────────────
 OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/output}"
@@ -153,7 +154,7 @@ fi
   --fakeroot \
   --overlay "${OVERLAY}" \
   "${IMAGE}" \
-  bash -c 'for d in /workspace /output /madgraph_docs /opt/claude /opt/claude-config; do
+  bash -c 'for d in /workspace /output /madgraph_docs /opt/claude /opt/.config/.claude; do
     [ -e "$d" ] || [ -L "$d" ] || mkdir -p "$d"
   done'
 
@@ -217,10 +218,10 @@ for i in $(seq 0 99); do
   if "${APPTAINER_BIN}" instance start \
     --fakeroot \
     --cleanenv \
-    --env "CLAUDE_CONFIG_DIR=/opt/claude-config" \
+    --env "CLAUDE_CONFIG_DIR=/opt/.config/.claude" \
     --env "TERM=${TERM:-xterm-256color}" \
     --env "LANG=${LANG:-C.UTF-8}" \
-    -B "${CLAUDE_CONFIG_DIR}:/opt/claude-config" \
+    -B "${CLAUDE_CONFIG_DIR}:/opt/.config/.claude" \
     -B "${OUTPUT_DIR}:/output" \
     -B "${CLAUDE_CODE_DIR}/.claude:/output/.claude" \
     -B "${WORKDIR}/workspace:/workspace" \
@@ -284,7 +285,7 @@ fi
 # Permissions are made fully permissive via settings.local.json instead.
 "${APPTAINER_BIN}" exec \
   --cleanenv \
-  --env "CLAUDE_CONFIG_DIR=/opt/claude-config" \
+  --env "CLAUDE_CONFIG_DIR=/opt/.config/.claude" \
   --env "TERM=${TERM:-xterm-256color}" \
   --env "LANG=${LANG:-C.UTF-8}" \
   --pwd /output \
