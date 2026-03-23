@@ -290,6 +290,8 @@ fi
   --env "LANG=${LANG:-C.UTF-8}" \
   --pwd /output \
   "instance://${INSTANCE_NAME}" \
-  bash -c 'export PATH="/root/.local/bin:${PATH}"; exec "$@"' _ "${CLAUDE_CONTAINER_BIN}" --session-id "${SESSION_UUID}" "$@"
+  bash -c 'export PATH="/root/.local/bin:${PATH}"; exec "$@"' _ "${CLAUDE_CONTAINER_BIN}" \
+  --append-system-prompt "$(cat "${CLAUDE_CODE_DIR}/prompts/system-prompt-append.md")" \
+  --session-id "${SESSION_UUID}" "$@"
 
 # When Claude Code exits, the script exits and the cleanup trap stops the instance.
