@@ -129,17 +129,28 @@ BUILD_FLAGS=""
 python3 "${CLAUDE_CODE_DIR}/scripts/build_claude_dir.py" "${STAGING_CLAUDE}" --type madagents --symlink ${BUILD_FLAGS} >/dev/null
 
 # ── Start MCP docs server on the host ────────────────────────────────
-MCP_PORT=8089
+MCP_PORT="${MCP_PORT:-8089}"
 MCP_PID=""
+GENERATED_MCP_JSON="${WORKDIR}/.mcp.json"
 if [[ "${ENABLE_DOC_EDITING}" == "1" ]]; then
   if [[ ! -f "${CLAUDE_CODE_DIR}/mcp/docs_server.py" ]]; then
     echo "ERROR: ENABLE_DOC_EDITING=1 but ${CLAUDE_CODE_DIR}/mcp/docs_server.py not found." >&2
     exit 1
   fi
-  if [[ ! -f "${CLAUDE_CODE_DIR}/.mcp.json" ]]; then
-    echo "ERROR: ENABLE_DOC_EDITING=1 but ${CLAUDE_CODE_DIR}/.mcp.json not found." >&2
+  if ! [[ "${MCP_PORT}" =~ ^[0-9]+$ ]] || (( MCP_PORT < 1 || MCP_PORT > 65535 )); then
+    echo "ERROR: MCP_PORT must be an integer in [1, 65535] (got: ${MCP_PORT})" >&2
     exit 1
   fi
+  cat > "${GENERATED_MCP_JSON}" <<EOF
+{
+  "mcpServers": {
+    "madgraph-docs": {
+      "type": "http",
+      "url": "http://127.0.0.1:${MCP_PORT}/mcp/"
+    }
+  }
+}
+EOF
   MCP_LOG="${WORKDIR}/logs/mcp_docs_server.log"
   DOCS_DIR="${SCRIPT_DIR}/src/madagents/software_instructions/madgraph" \
   OVERVIEW_FILE="${SCRIPT_DIR}/src/madagents/software_instructions/madgraph.md" \
@@ -150,10 +161,28 @@ if [[ "${ENABLE_DOC_EDITING}" == "1" ]]; then
   MCP_PORT="${MCP_PORT}" \
   python3 "${CLAUDE_CODE_DIR}/mcp/docs_server.py" >"${MCP_LOG}" 2>&1 &
   MCP_PID=$!
-  sleep 1  # Give it time to start.
-  if ! kill -0 "${MCP_PID}" 2>/dev/null; then
-    echo "ERROR: MCP docs server failed to start. Log:" >&2
+
+  # Wait until the MCP server is actually listening on ${MCP_PORT}, or fail.
+  # Polls every 100ms for up to 10s.  If the process dies during the wait
+  # (e.g. port collision, missing dependency), fail immediately and dump log.
+  mcp_ready=false
+  for _ in $(seq 1 100); do
+    if ! kill -0 "${MCP_PID}" 2>/dev/null; then
+      echo "ERROR: MCP docs server died during startup. Log (${MCP_LOG}):" >&2
+      cat "${MCP_LOG}" >&2
+      exit 1
+    fi
+    if (exec 3<>"/dev/tcp/127.0.0.1/${MCP_PORT}") 2>/dev/null; then
+      exec 3<&- 3>&-
+      mcp_ready=true
+      break
+    fi
+    sleep 0.1
+  done
+  if ! $mcp_ready; then
+    echo "ERROR: MCP docs server did not start listening on 127.0.0.1:${MCP_PORT} within 10s. Log (${MCP_LOG}):" >&2
     cat "${MCP_LOG}" >&2
+    kill "${MCP_PID}" 2>/dev/null || true
     exit 1
   fi
 fi
@@ -288,7 +317,7 @@ if [[ -n "${HOST_CLAUDE_INSTALL}" ]]; then
   CLAUDE_BIND_ARGS+=(-B "${HOST_CLAUDE_INSTALL}:/opt/claude:ro")
 fi
 if [[ "${ENABLE_DOC_EDITING}" == "1" ]]; then
-  CLAUDE_BIND_ARGS+=(-B "${CLAUDE_CODE_DIR}/.mcp.json:/output/.mcp.json:ro")
+  CLAUDE_BIND_ARGS+=(-B "${GENERATED_MCP_JSON}:/output/.mcp.json:ro")
 fi
 
 # ── Start Apptainer instance ────────────────────────────────────────

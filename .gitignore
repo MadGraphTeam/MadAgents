@@ -26,3 +26,4 @@ claude_code/archive
 !claude_code/CLAUDE.md
 .nfs*
 archive/
+.apptainer_tmp

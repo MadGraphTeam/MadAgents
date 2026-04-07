@@ -94,6 +94,19 @@ ENABLE_DOC_EDITING=1 ./madrun_code.sh
 > How can I improve the MadGraph documentation?
 ```
 
+> **Host requirements:** doc-editing mode launches an MCP server (`claude_code/mcp/docs_server.py`) on the **host**, not inside the container. The host Python environment must therefore have the dependencies from [`requirements-agent.txt`](requirements-agent.txt) installed. Set up a venv or conda env, install them, and activate it before running `madrun_code.sh`, e.g.:
+> ```bash
+> python3 -m venv .venv && source .venv/bin/activate
+> pip install -r requirements-agent.txt
+> ENABLE_DOC_EDITING=1 ./madrun_code.sh
+> ```
+>
+> **Port:** the MCP server listens on **TCP 8089** on the host by default. Override with `MCP_PORT` (in `config.env` or as a one-shot env var) if that port is taken:
+> ```bash
+> MCP_PORT=9089 ENABLE_DOC_EDITING=1 ./madrun_code.sh
+> ```
+> If the chosen port is in use, the MCP server will fail to start — check `run_dir/workdirs/<stamp>/logs/mcp_docs_server.log`.
+
 See [`claude_code/README.md`](claude_code/README.md) for the doc-editing skills the instance has access to.
 
 For automated, batch-style runs (e.g. CI, overnight evaluations), use the host-side Python pipeline at [`eval/`](eval/) instead.
