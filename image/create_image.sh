@@ -99,4 +99,8 @@ echo "  $APPTAINER_BIN overlay create --fakeroot --sparse --size 10240 \"$IMG_PA
 # "$APPTAINER_BIN" overlay create --size 1024 "$IMG_PATH"
 echo "Done. Built: $IMG_PATH"
 
-# "$APPTAINER_BIN" cache clean"
+# --- Clean up apptainer build artifacts in /tmp ---
+echo "Cleaning up build artifacts in /tmp ..."
+find /tmp -maxdepth 1 -user "$(id -un)" \( -name 'build-temp-*' -o -name 'bundle-temp-*' -o -name 'overlay-*' \) -exec rm -rf {} +
+"$APPTAINER_BIN" cache clean --force
+echo "Cleanup done."

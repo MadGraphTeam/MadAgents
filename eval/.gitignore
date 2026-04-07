@@ -1,0 +1,19 @@
+# Per-run artifacts
+runs/
+
+# Per-example artifacts
+examples/*/output/
+examples/*/workspace/
+examples/*/overlay.img
+examples/*/claude_config/
+examples/*/claude_code_local/
+examples/*/docs_working/
+examples/*/docs_source/
+examples/*/db/
+examples/*/iter_*/
+examples/*/latest
+
+# Claude Code session data
+**/claude_config/
+**/.claude/
+**/session_*/

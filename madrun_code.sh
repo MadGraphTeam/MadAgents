@@ -13,9 +13,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_CODE_DIR="${SCRIPT_DIR}/claude_code"
 
 # ── Load config ──────────────────────────────────────────────────────
+# Precedence: caller env > config.env > script defaults
 CONFIG_PATH="${SCRIPT_DIR}/config.env"
 if [[ -f "${CONFIG_PATH}" ]]; then
+  # Save any caller-provided overrides before sourcing
+  declare -A _caller_env
+  while IFS='=' read -r _key _rest; do
+    _key="${_key%%[[:space:]]*}"
+    [[ -z "$_key" || "$_key" == \#* ]] && continue
+    [[ -n "${!_key+x}" ]] && _caller_env["$_key"]="${!_key}"
+  done < "${CONFIG_PATH}"
+
   set -a; . "${CONFIG_PATH}"; set +a
+
+  # Restore caller overrides (CLI env takes precedence over config.env)
+  for _key in "${!_caller_env[@]}"; do
+    export "$_key=${_caller_env[$_key]}"
+  done
+  unset _caller_env _key _rest
 fi
 
 # API keys from config.env are for the v1.1 stack; Claude Code handles
@@ -85,11 +100,68 @@ mkdir -p "${WORKDIR}/workspace" "${WORKDIR}/logs"
 SESSION_UUID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 echo -n "${SESSION_UUID}" > "${WORKDIR}/logs/session_uuid"
 
+# Only pass --session-id if the user isn't resuming/continuing an existing session.
+SESSION_ID_ARGS=(--session-id "${SESSION_UUID}")
+for arg in "$@"; do
+  if [[ "$arg" == "--resume" || "$arg" == "--continue" ]]; then
+    SESSION_ID_ARGS=()
+    break
+  fi
+done
+
 # ── Build generated agent cards ───────────────────────────────────────
 python3 "${CLAUDE_CODE_DIR}/scripts/build_madgraph_operator.py" >/dev/null
 
+# ── Feature flags (opt-in) ────────────────────────────────────────────
+ENABLE_VERIFY="${ENABLE_VERIFY:-0}"
+ENABLE_DOC_EDITING="${ENABLE_DOC_EDITING:-0}"
+
+# Doc editing implies verify.
+[[ "${ENABLE_DOC_EDITING}" == "1" ]] && ENABLE_VERIFY="1"
+
+# ── Build staging .claude/ directory ─────────────────────────────────
+STAGING_CLAUDE="${WORKDIR}/.claude"
+BUILD_FLAGS=""
+[[ "${ENABLE_VERIFY}" == "1" ]] && BUILD_FLAGS="${BUILD_FLAGS} --verify"
+[[ "${ENABLE_DOC_EDITING}" == "1" ]] && BUILD_FLAGS="${BUILD_FLAGS} --doc-editing"
+python3 "${CLAUDE_CODE_DIR}/scripts/build_claude_dir.py" "${STAGING_CLAUDE}" --type madagents --symlink ${BUILD_FLAGS} >/dev/null
+
+# ── Start MCP docs server on the host ────────────────────────────────
+MCP_PORT=8089
+MCP_PID=""
+if [[ "${ENABLE_DOC_EDITING}" == "1" ]]; then
+  if [[ ! -f "${CLAUDE_CODE_DIR}/mcp/docs_server.py" ]]; then
+    echo "ERROR: ENABLE_DOC_EDITING=1 but ${CLAUDE_CODE_DIR}/mcp/docs_server.py not found." >&2
+    exit 1
+  fi
+  if [[ ! -f "${CLAUDE_CODE_DIR}/.mcp.json" ]]; then
+    echo "ERROR: ENABLE_DOC_EDITING=1 but ${CLAUDE_CODE_DIR}/.mcp.json not found." >&2
+    exit 1
+  fi
+  MCP_LOG="${WORKDIR}/logs/mcp_docs_server.log"
+  DOCS_DIR="${SCRIPT_DIR}/src/madagents/software_instructions/madgraph" \
+  OVERVIEW_FILE="${SCRIPT_DIR}/src/madagents/software_instructions/madgraph.md" \
+  AGENT_HEADER="${CLAUDE_CODE_DIR}/prompts/madgraph-operator.header.md" \
+  PATH_MAP="{\"\/workspace\":\"${WORKDIR}/workspace\",\"\/output\":\"${OUTPUT_DIR}\"}" \
+  CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR}" \
+  SESSION_ID="${SESSION_UUID}" \
+  MCP_PORT="${MCP_PORT}" \
+  python3 "${CLAUDE_CODE_DIR}/mcp/docs_server.py" >"${MCP_LOG}" 2>&1 &
+  MCP_PID=$!
+  sleep 1  # Give it time to start.
+  if ! kill -0 "${MCP_PID}" 2>/dev/null; then
+    echo "ERROR: MCP docs server failed to start. Log:" >&2
+    cat "${MCP_LOG}" >&2
+    exit 1
+  fi
+fi
+
 # Ensure host-side directories exist for bind mounts.
 mkdir -p "${CLAUDE_CONFIG_DIR}" "${OUTPUT_DIR}" "${OUTPUT_DIR}/.claude"
+
+# Remove stale .mcp.json from output/ — it's only needed when doc editing
+# is enabled (bind-mounted over by CLAUDE_BIND_ARGS).
+rm -f "${OUTPUT_DIR}/.mcp.json"
 
 # ── Locate claude installation on host ──────────────────────────────
 CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
@@ -150,13 +222,15 @@ fi
 # ── Ensure bind-mount destinations exist inside the container ────────
 # The SIF image may not contain /workspace, /output, etc.  Create them
 # in the persistent overlay so that instance start can mount onto them.
+OVERLAY_DIRS="/workspace /output /madgraph_docs /opt/claude /opt/.config/.claude"
+
 "${APPTAINER_BIN}" exec \
   --fakeroot \
   --overlay "${OVERLAY}" \
   "${IMAGE}" \
-  bash -c 'for d in /workspace /output /madgraph_docs /opt/claude /opt/.config/.claude; do
-    [ -e "$d" ] || [ -L "$d" ] || mkdir -p "$d"
-  done'
+  bash -c "for d in ${OVERLAY_DIRS}; do
+    [ -e \"\$d\" ] || [ -L \"\$d\" ] || mkdir -p \"\$d\"
+  done" 2>/dev/null
 
 # ── Instance state ──────────────────────────────────────────────────
 APPTAINER_LOG="${WORKDIR}/logs/apptainer.log"
@@ -179,6 +253,12 @@ cleanup() {
 
   local status=$?
   printf '\nShutting down ...\n'
+
+  # Stop MCP docs server.
+  if [[ -n "${MCP_PID}" ]]; then
+    kill "${MCP_PID}" 2>/dev/null || true
+    echo "Stopped MCP docs server (PID ${MCP_PID})"
+  fi
 
   if [[ "${SESSION_STARTED}" == "true" && -n "${INSTANCE_NAME}" ]]; then
     "${APPTAINER_BIN}" instance stop "${INSTANCE_NAME}" 2>/dev/null || true
@@ -205,6 +285,9 @@ CLAUDE_BIND_ARGS=()
 if [[ -n "${HOST_CLAUDE_INSTALL}" ]]; then
   CLAUDE_BIND_ARGS+=(-B "${HOST_CLAUDE_INSTALL}:/opt/claude:ro")
 fi
+if [[ "${ENABLE_DOC_EDITING}" == "1" ]]; then
+  CLAUDE_BIND_ARGS+=(-B "${CLAUDE_CODE_DIR}/.mcp.json:/output/.mcp.json:ro")
+fi
 
 # ── Start Apptainer instance ────────────────────────────────────────
 INSTANCE_BASE="madagents-cc"
@@ -223,7 +306,7 @@ for i in $(seq 0 99); do
     --env "LANG=${LANG:-C.UTF-8}" \
     -B "${CLAUDE_CONFIG_DIR}:/opt/.config/.claude" \
     -B "${OUTPUT_DIR}:/output" \
-    -B "${CLAUDE_CODE_DIR}/.claude:/output/.claude" \
+    -B "${STAGING_CLAUDE}:/output/.claude" \
     -B "${WORKDIR}/workspace:/workspace" \
     -B "${MADGRAPH_DOCS}:/madgraph_docs:ro" \
     ${CLAUDE_BIND_ARGS[@]+"${CLAUDE_BIND_ARGS[@]}"} \
@@ -234,6 +317,7 @@ for i in $(seq 0 99); do
     SESSION_STARTED=true
     INSTANCE_NAME="${candidate}"
     printf '%s\n' "${INSTANCE_NAME}" > "${WORKDIR}/logs/instance_name.txt"
+    echo "Apptainer instance: ${INSTANCE_NAME}"
     break
   fi
 
@@ -283,15 +367,22 @@ fi
 # --fakeroot is inherited from the instance, so Claude Code sees UID 0.
 # Because of this, --dangerously-skip-permissions cannot be used.
 # Permissions are made fully permissive via settings.local.json instead.
+CLAUDE_ENV_ARGS=()
+if [[ "${ENABLE_DOC_EDITING}" == "1" ]]; then
+  # Must be a real process env var (settings.local.json env only reaches subprocesses).
+  CLAUDE_ENV_ARGS+=(--env "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
+fi
 "${APPTAINER_BIN}" exec \
   --cleanenv \
   --env "CLAUDE_CONFIG_DIR=/opt/.config/.claude" \
   --env "TERM=${TERM:-xterm-256color}" \
   --env "LANG=${LANG:-C.UTF-8}" \
+  ${CLAUDE_ENV_ARGS[@]+"${CLAUDE_ENV_ARGS[@]}"} \
   --pwd /output \
   "instance://${INSTANCE_NAME}" \
   bash -c 'export PATH="/root/.local/bin:${PATH}"; exec "$@"' _ "${CLAUDE_CONTAINER_BIN}" \
   --append-system-prompt "$(cat "${CLAUDE_CODE_DIR}/prompts/system-prompt-append.md")" \
-  --session-id "${SESSION_UUID}" "$@"
+  --teammate-mode tmux \
+  ${SESSION_ID_ARGS[@]+"${SESSION_ID_ARGS[@]}"} "$@"
 
 # When Claude Code exits, the script exits and the cleanup trap stops the instance.

@@ -31,7 +31,7 @@ from madagents.agents.orchestrator import (
 )
 from madagents.agents.reviewer import Reviewer, ReviewerState, REVIEWER_NAMES
 from madagents.agents.workers.base import BaseWorker
-from madagents.agents.summarizer import Summarizer, mask_tool_observations, approx_tokens_in_messages
+from madagents.agents.summarizer import Summarizer, approx_tokens_in_messages
 
 from madagents.llm import LLMRuntime
 
@@ -429,10 +429,10 @@ def get_planner_executor_node(
 
         planner_thinking = extract_thinking(last_ai) if last_ai else None
 
-        # Mask and save planner trace
-        masked_planner_msgs = mask_tool_observations(result["messages"])
+        # Save planner trace
+        planner_trace_msgs = result["messages"]
         plan_for_trace = state.get("plan")  # old plan (before this invocation)
-        trace_path, trace_counter = _save_trace(masked_planner_msgs, "planner", plan_for_trace, instance_id=instance_id)
+        trace_path, trace_counter = _save_trace(planner_trace_msgs, "planner", plan_for_trace, instance_id=instance_id)
 
         # Display AIMessage for `messages` (v1.0-compatible)
         display_additional = {
@@ -484,7 +484,7 @@ def get_planner_executor_node(
             "messages": [display_response],
             "orchestrator_messages": [tool_msg],
             "planner_full_messages": {message_id: full_response},
-            "agents_messages": {"planner": {message_id: masked_planner_msgs}},
+            "agents_messages": {"planner": {message_id: planner_trace_msgs}},
             "agent_instance_map": {"planner": {str(instance_id): [message_id]}},
             "plan": plan,
             "plan_meta_data": plan_meta_data,
@@ -567,9 +567,9 @@ def get_reviewer_executor_node(
         reviewer_text = response_to_text(result["messages"][-1])
         reviewer_thinking = extract_thinking(result["messages"][-1])
 
-        # Mask and save reviewer trace
-        masked_reviewer_msgs = mask_tool_observations(result["messages"])
-        trace_path, trace_counter = _save_trace(masked_reviewer_msgs, reviewer_name, plan, instance_id=instance_id)
+        # Save reviewer trace
+        reviewer_trace_msgs = result["messages"]
+        trace_path, trace_counter = _save_trace(reviewer_trace_msgs, reviewer_name, plan, instance_id=instance_id)
 
         # Display AIMessage for `messages`
         display_additional = {
@@ -607,7 +607,7 @@ def get_reviewer_executor_node(
             "messages": [display_response],
             "orchestrator_messages": [tool_msg],
             "reviewer_full_messages": {message_id: full_response},
-            "agents_messages": {reviewer_name: {message_id: masked_reviewer_msgs}},
+            "agents_messages": {reviewer_name: {message_id: reviewer_trace_msgs}},
             "agent_instance_map": {reviewer_name: {str(instance_id): [message_id]}},
             "agents_message_summary": {summary_key: agent_message_summary},
             "agents_non_summary_start": {summary_key: agent_non_summary_start},
@@ -717,14 +717,10 @@ def get_worker_executor_node(
         plan = state.get("plan")
         plan_footer = compact_plan_summary(plan)
 
-        # Mask verbose tool outputs before persisting so that future
-        # invocations of this worker see compact prior context.
-        masked_result_msgs = mask_tool_observations(
-            [result["user_msg"], *result["messages"]]
-        )
+        worker_trace_msgs = [result["user_msg"], *result["messages"]]
 
         # Save agent trace to disk
-        trace_path, trace_counter = _save_trace(masked_result_msgs, agent_name, plan, instance_id=instance_id)
+        trace_path, trace_counter = _save_trace(worker_trace_msgs, agent_name, plan, instance_id=instance_id)
 
         # Include instance in ToolMessage content for orchestrator
         instance_label = f" (instance {instance_id})" if instance_id != 0 else ""
@@ -744,7 +740,7 @@ def get_worker_executor_node(
 
         return {
             "agents_messages": {
-                agent_name: {message_id: masked_result_msgs}
+                agent_name: {message_id: worker_trace_msgs}
             },
             "agent_instance_map": {agent_name: {str(instance_id): [message_id]}},
             "messages": [display_response],

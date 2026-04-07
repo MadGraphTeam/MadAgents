@@ -1,0 +1,19 @@
+[
+  {
+    "name": "COMPLETE",
+    "description": "The response fully and correctly answers the question.",
+    "action": "done"
+  },
+  {
+    "name": "INCOMPLETE",
+    "description": "The response is cut off, truncated, or missing key parts of the answer.",
+    "action": "continue",
+    "follow_up_guidance": "Ask the agent to provide the complete answer, pointing out what is missing or truncated."
+  },
+  {
+    "name": "CLARIFYING",
+    "description": "Instead of answering, the response asks a clarifying question.",
+    "action": "continue",
+    "follow_up_guidance": "Instruct the agent to not ask clarifying questions, make standard assumptions and state them explicitly, then provide a direct answer."
+  }
+]

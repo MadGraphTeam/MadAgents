@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from typing_extensions import TypedDict
 
-from madagents.agents.summarizer import Summarizer, mask_tool_observations
+from madagents.agents.summarizer import Summarizer
 from madagents.llm import LLMRuntime, get_default_runtime
 from madagents.utils import annotate_output_token_counts
 
@@ -82,10 +82,7 @@ def get_worker_node(
             # Avoid double-skipping when the caller already trimmed messages.
             non_summary_start = 0
 
-        # Mask tool outputs from previous invocations (defense-in-depth;
-        # the graph boundary already masks, but prev_msgs may arrive
-        # unmasked from other callers).
-        prev_msgs = mask_tool_observations(list(state["prev_msgs"]))
+        prev_msgs = list(state["prev_msgs"])
 
         context_msgs = [
             *prev_msgs,

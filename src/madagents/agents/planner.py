@@ -28,7 +28,7 @@ from madagents.agents.workers.researcher import RESEARCHER_DESC_SHORT
 from madagents.agents.workers.plotter import PLOTTER_DESC_SHORT
 from madagents.agents.workers.physics_expert import PHYSICS_EXPERT_DESC_SHORT
 from madagents.agents.prompts_common import STYLE_BLOCK
-from madagents.agents.summarizer import Summarizer, mask_tool_observations
+from madagents.agents.summarizer import Summarizer
 from madagents.llm import LLMRuntime, get_default_runtime
 from madagents.utils import annotate_output_token_counts
 
@@ -515,7 +515,7 @@ def get_planner_node(
         if prev_msgs_summary and prev_msgs_summary.strip():
             _prompt += f"\n\n<previous_conversation_summary>\n{prev_msgs_summary}\n</previous_conversation_summary>"
 
-        prev_msgs = mask_tool_observations(list(state.get("prev_msgs", [])))
+        prev_msgs = list(state.get("prev_msgs", []))
         non_summary_start = state.get("non_summary_start", 0) or 0
 
         context_msgs = [*prev_msgs, *state["messages"]]

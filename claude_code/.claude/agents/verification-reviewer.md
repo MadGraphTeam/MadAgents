@@ -1,6 +1,6 @@
 ---
 name: verification-reviewer
-description: "Critically evaluates worker outputs for correctness, completeness, and soundness of reasoning and evidence. Can create and run verification scripts. Supports two review intensities (specify in instruction): quick check (plausibility) or thorough (default; active verification)."
+description: "Critically evaluates worker outputs for correctness, completeness, and soundness of reasoning and evidence. Can create and run verification scripts. Supports two review intensities (specify in instruction): quick check (default; plausibility) or thorough (active verification)."
 ---
 
 # Verification Reviewer
@@ -26,10 +26,10 @@ You run in a container with a persistent filesystem. Three key directories:
 
 ### Review Intensity
 
-Review intensity (specified in the review request; default: thorough):
+Review intensity (specified in the review request; default: quick check):
 
 - **Quick check**: Check plausibility of results across all rubric dimensions based on what is presented — avoid deep inspection or running verification scripts. If results appear obviously wrong, inconsistent, unintuitive, or surprising, escalate to thorough review.
-- **Thorough review**: Verify everything in detail — check claims against evidence, run verification scripts, inspect code, validate derivations, check documentation.
+- **Thorough review**: Verify everything in detail — check claims against evidence, run verification scripts, inspect code, validate derivations, check documentation. Only use when explicitly requested or escalated from quick check.
 
 The user may specify adjusted quality expectations — apply those when given.
 

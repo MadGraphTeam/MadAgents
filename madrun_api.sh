@@ -6,35 +6,39 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_PATH="${SCRIPT_DIR}/config.env"
 
 # --- Load system vars from config.env ---
+# Precedence: caller env > config.env > CLI flags > script defaults
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "ERROR: config.env not found at $CONFIG_PATH" >&2
   exit 1
 fi
 
+# Save any caller-provided overrides before sourcing
+declare -A _caller_env
+while IFS='=' read -r _key _rest; do
+  _key="${_key%%[[:space:]]*}"
+  [[ -z "$_key" || "$_key" == \#* ]] && continue
+  [[ -n "${!_key+x}" ]] && _caller_env["$_key"]="${!_key}"
+done < "$CONFIG_PATH"
+
 set -a
 . "$CONFIG_PATH"
 set +a
 
+# Restore caller overrides (caller env takes precedence over config.env)
+for _key in "${!_caller_env[@]}"; do
+  export "$_key=${_caller_env[$_key]}"
+done
+unset _caller_env _key _rest
+
 # ---------- usage ----------
 usage() {
   cat <<'USAGE'
-Usage: madrun.sh [options] [-- <extra args passed to madrun_main.py>]
+Usage: madrun_api.sh [-- <extra args passed to madrun_main.py>]
 
-Options:
-  -o, --output_dir DIR          Output directory
-      --run_dir DIR             Run directory
-  -p, --project_dir DIR         Project directory (defaults to script location)
-      --apptainer_dir DIR       Directory containing apptainer binary
-      --apptainer_cachedir DIR  Apptainer cache directory
-      --apptainer_configdir DIR Apptainer config directory
-      --npm_config_cache DIR    NPM cache directory
-      --frontend_port PORT      Frontend port (default: 5173)
-      --backend_port PORT       Backend port (default: 8000)
-  -h, --help                    Show this help and exit
+All configuration is via config.env (or caller environment variables).
+Caller env vars take precedence over config.env; unset vars use defaults.
 
-Notes:
-  - CLI path arguments are resolved relative to the current working directory.
-  - config.env path values are resolved relative to this script's directory.
+See config.env.example for available settings.
 USAGE
 }
 
@@ -50,136 +54,9 @@ resolve_path() {
   fi
 }
 
-# Resolve relative paths against current working directory (CLI inputs)
-resolve_cli_path() {
-  local p="$1"
-  if [[ -z "${p}" ]]; then
-    echo ""
-  elif [[ "${p}" = /* ]]; then
-    echo "${p}"
-  else
-    echo "$(pwd)/${p}"
-  fi
-}
-
-# ---------- args ----------
-output_dir="${OUTPUT_DIR-}"
-run_dir="${RUN_DIR-}"
-apptainer_dir="${APPTAINER_DIR-}"
-apptainer_cachedir="${APPTAINER_CACHEDIR-}"
-apptainer_configdir="${APPTAINER_CONFIGDIR-}"
-npm_config_cache="${NPM_CONFIG_CACHE-}"
-frontend_port="${FRONTEND_PORT-}"
-backend_port="${BACKEND_PORT-}"
-project_dir=""
-output_dir_from_cli=false
-run_dir_from_cli=false
-apptainer_dir_from_cli=false
-apptainer_cachedir_from_cli=false
-apptainer_configdir_from_cli=false
-npm_config_cache_from_cli=false
-project_dir_from_cli=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -o|--output_dir)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      output_dir="$2"
-      output_dir_from_cli=true
-      shift 2
-      ;;
-    --output_dir=*)
-      output_dir="${1#*=}"
-      output_dir_from_cli=true
-      shift
-      ;;
-    --run_dir)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      run_dir="$2"
-      run_dir_from_cli=true
-      shift 2
-      ;;
-    --run_dir=*)
-      run_dir="${1#*=}"
-      run_dir_from_cli=true
-      shift
-      ;;
-    -p|--project_dir)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      project_dir="$2"
-      project_dir_from_cli=true
-      shift 2
-      ;;
-    --project_dir=*)
-      project_dir="${1#*=}"
-      project_dir_from_cli=true
-      shift
-      ;;
-    --apptainer_dir)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      apptainer_dir="$2"
-      apptainer_dir_from_cli=true
-      shift 2
-      ;;
-    --apptainer_dir=*)
-      apptainer_dir="${1#*=}"
-      apptainer_dir_from_cli=true
-      shift
-      ;;
-    --apptainer_cachedir)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      apptainer_cachedir="$2"
-      apptainer_cachedir_from_cli=true
-      shift 2
-      ;;
-    --apptainer_cachedir=*)
-      apptainer_cachedir="${1#*=}"
-      apptainer_cachedir_from_cli=true
-      shift
-      ;;
-    --apptainer_configdir)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      apptainer_configdir="$2"
-      apptainer_configdir_from_cli=true
-      shift 2
-      ;;
-    --apptainer_configdir=*)
-      apptainer_configdir="${1#*=}"
-      apptainer_configdir_from_cli=true
-      shift
-      ;;
-    --npm_config_cache)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      npm_config_cache="$2"
-      npm_config_cache_from_cli=true
-      shift 2
-      ;;
-    --npm_config_cache=*)
-      npm_config_cache="${1#*=}"
-      npm_config_cache_from_cli=true
-      shift
-      ;;
-    --frontend_port)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      frontend_port="$2"
-      shift 2
-      ;;
-    --frontend_port=*)
-      frontend_port="${1#*=}"
-      shift
-      ;;
-    --backend_port)
-      [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 2; }
-      backend_port="$2"
-      shift 2
-      ;;
-    --backend_port=*)
-      backend_port="${1#*=}"
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
+    -h|--help) usage; exit 0 ;;
     --) shift; break ;;
     -*) break ;;
     *)  break ;;
@@ -187,89 +64,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------- paths / vars ----------
-if [[ -z "${project_dir}" ]]; then
-  project_dir="${SCRIPT_DIR}"
-elif [[ "${project_dir_from_cli}" == true ]]; then
-  project_dir="$(resolve_cli_path "${project_dir}")"
-fi
-project_dir="$(resolve_path "${project_dir}")"
-PROJECT_DIR="${project_dir}"
+PROJECT_DIR="${SCRIPT_DIR}"
 
-DEFAULT_OUTPUT_DIR="${PROJECT_DIR}/output"
-DEFAULT_RUN_DIR="${PROJECT_DIR}/run_dir"
-DEFAULT_APPTAINER_CACHEDIR="${PROJECT_DIR}/.apptainer/cache"
-DEFAULT_APPTAINER_CONFIGDIR="${PROJECT_DIR}/.apptainer"
-DEFAULT_NPM_CONFIG_CACHE="${PROJECT_DIR}/.npm"
-DEFAULT_FRONTEND_PORT=5173
-DEFAULT_BACKEND_PORT=8000
-
-if [[ "${output_dir_from_cli}" == true && -n "${output_dir}" ]]; then
-  output_dir="$(resolve_cli_path "${output_dir}")"
-fi
-if [[ "${run_dir_from_cli}" == true && -n "${run_dir}" ]]; then
-  run_dir="$(resolve_cli_path "${run_dir}")"
-fi
-if [[ "${apptainer_dir_from_cli}" == true && -n "${apptainer_dir}" ]]; then
-  apptainer_dir="$(resolve_cli_path "${apptainer_dir}")"
-fi
-if [[ "${apptainer_cachedir_from_cli}" == true && -n "${apptainer_cachedir}" ]]; then
-  apptainer_cachedir="$(resolve_cli_path "${apptainer_cachedir}")"
-fi
-if [[ "${apptainer_configdir_from_cli}" == true && -n "${apptainer_configdir}" ]]; then
-  apptainer_configdir="$(resolve_cli_path "${apptainer_configdir}")"
-fi
-if [[ "${npm_config_cache_from_cli}" == true && -n "${npm_config_cache}" ]]; then
-  npm_config_cache="$(resolve_cli_path "${npm_config_cache}")"
-fi
-
-output_dir="${output_dir:-${DEFAULT_OUTPUT_DIR}}"
-run_dir="${run_dir:-${DEFAULT_RUN_DIR}}"
-apptainer_cachedir="${apptainer_cachedir:-${DEFAULT_APPTAINER_CACHEDIR}}"
-apptainer_configdir="${apptainer_configdir:-${DEFAULT_APPTAINER_CONFIGDIR}}"
-npm_config_cache="${npm_config_cache:-${DEFAULT_NPM_CONFIG_CACHE}}"
-frontend_port="${frontend_port:-${DEFAULT_FRONTEND_PORT}}"
-backend_port="${backend_port:-${DEFAULT_BACKEND_PORT}}"
-
-output_dir="$(resolve_path "${output_dir}")"
-run_dir="$(resolve_path "${run_dir}")"
-apptainer_cachedir="$(resolve_path "${apptainer_cachedir}")"
-apptainer_configdir="$(resolve_path "${apptainer_configdir}")"
-npm_config_cache="$(resolve_path "${npm_config_cache}")"
+output_dir="$(resolve_path "${OUTPUT_DIR:-${PROJECT_DIR}/output}")"
+run_dir="$(resolve_path "${RUN_DIR:-${PROJECT_DIR}/run_dir}")"
+apptainer_cachedir="$(resolve_path "${APPTAINER_CACHEDIR:-${PROJECT_DIR}/.apptainer/cache}")"
+apptainer_configdir="$(resolve_path "${APPTAINER_CONFIGDIR:-${PROJECT_DIR}/.apptainer}")"
+npm_config_cache="$(resolve_path "${NPM_CONFIG_CACHE:-${PROJECT_DIR}/.npm}")"
+frontend_port="${FRONTEND_PORT:-5173}"
+backend_port="${BACKEND_PORT:-8000}"
 
 if [[ -z "${output_dir}" ]]; then
-  echo "Error: output_dir is empty" >&2
+  echo "Error: OUTPUT_DIR resolved to empty" >&2
   exit 2
 fi
 if [[ -z "${run_dir}" ]]; then
-  echo "Error: run_dir is empty" >&2
+  echo "Error: RUN_DIR resolved to empty" >&2
   exit 2
 fi
-if ! [[ "${frontend_port}" =~ ^[0-9]+$ ]]; then
-  echo "Error: frontend_port must be an integer" >&2
+if ! [[ "${frontend_port}" =~ ^[0-9]+$ ]] || (( frontend_port < 1 || frontend_port > 65535 )); then
+  echo "Error: FRONTEND_PORT must be an integer in [1, 65535]" >&2
   exit 2
 fi
-if ! [[ "${backend_port}" =~ ^[0-9]+$ ]]; then
-  echo "Error: backend_port must be an integer" >&2
-  exit 2
-fi
-if (( frontend_port < 1 || frontend_port > 65535 )); then
-  echo "Error: frontend_port must be in [1, 65535]" >&2
-  exit 2
-fi
-if (( backend_port < 1 || backend_port > 65535 )); then
-  echo "Error: backend_port must be in [1, 65535]" >&2
+if ! [[ "${backend_port}" =~ ^[0-9]+$ ]] || (( backend_port < 1 || backend_port > 65535 )); then
+  echo "Error: BACKEND_PORT must be an integer in [1, 65535]" >&2
   exit 2
 fi
 
 RUN_DIR="${run_dir}"
 OUTPUT_DIR="${output_dir}"
-if [[ -n "${apptainer_dir}" ]]; then
-  apptainer_dir="$(resolve_path "${apptainer_dir}")"
-  APPTAINER_DIR="${apptainer_dir}"
+if [[ -n "${APPTAINER_DIR-}" ]]; then
+  APPTAINER_DIR="$(resolve_path "${APPTAINER_DIR}")"
 else
   apptainer_bin="$(command -v apptainer || true)"
   if [[ -z "${apptainer_bin}" ]]; then
-    echo "ERROR: apptainer not found on PATH. Set --apptainer_dir or APPTAINER_DIR in config.env." >&2
+    echo "ERROR: apptainer not found on PATH. Set APPTAINER_DIR in config.env." >&2
     exit 1
   fi
   APPTAINER_DIR="$(dirname "${apptainer_bin}")"
@@ -448,8 +277,8 @@ for i in $(seq 0 999); do
 
   if "${APPTAINER_BIN}" instance start \
     --fakeroot \
-    -B "${SRC_DIR}:/AgentFitter/src:ro" \
-    -B "${UI_DIR}:/AgentFitter/src/madagents/frontend/ui" \
+    -B "${SRC_DIR}:/MadAgents/src:ro" \
+    -B "${UI_DIR}:/MadAgents/src/madagents/frontend/ui" \
     -B "${MADGRAPH_DOCS_DIR}:/madgraph_docs:ro" \
     -B "${output_dir}:/output" \
     -B "${RUN_DIR}:/runs" \
@@ -478,8 +307,8 @@ fi
 
 # ---------- start driver ----------
 setsid "${APPTAINER_BIN}" exec --pwd /output instance://"${INSTANCE_NAME}" \
-  /bin/env PYTHONPATH="/AgentFitter/src:${PYTHONPATH:-}" \
-  /AgentFitter/envs/Agent/bin/python -m madagents.madrun_main \
+  /bin/env PYTHONPATH="/MadAgents/src:${PYTHONPATH:-}" \
+  python3 -m madagents.madrun_main \
   --frontend_port "${frontend_port}" \
   --backend_port "${backend_port}" \
   "$@" \
@@ -519,7 +348,7 @@ fi
 
 # ---------- start local madgraph cli ----------
 "${APPTAINER_BIN}" exec --pwd /output instance://"${INSTANCE_NAME}" \
-  python /AgentFitter/src/madagents/cli_bridge/attach_client.py \
+  python /MadAgents/src/madagents/cli_bridge/attach_client.py \
     --workdir /runs/user_bridge
 
 # When attach_client exits, script exits; cleanup trap will run.

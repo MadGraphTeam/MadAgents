@@ -1,0 +1,3 @@
+## Focus Instructions
+
+{focus}

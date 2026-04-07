@@ -19,7 +19,7 @@ from madagents.tools import (
   bash_tool, apply_patch_tool,
   openai_read_pdf_tool, openai_read_image_tool, web_search_tool,
 )
-from madagents.agents.summarizer import Summarizer, mask_tool_observations
+from madagents.agents.summarizer import Summarizer
 from madagents.llm import LLMRuntime, get_default_runtime
 from madagents.utils import annotate_output_token_counts
 
@@ -39,7 +39,7 @@ PLAN_REVIEWER_DESC = """plan_reviewer (Plan-Reviewer)
 VERIFICATION_REVIEWER_DESC = """verification_reviewer (Verification-Reviewer)
 - Critically evaluates worker outputs for correctness, completeness, and soundness of reasoning and evidence.
 - Can create and run verification scripts.
-- Supports two review intensities (specify in instruction): quick check (plausibility) or thorough (default; active verification).
+- Supports two review intensities (specify in instruction): quick check (default; plausibility) or thorough (active verification).
 - Has built-in quality standards. Only pass adjusted expectations if the user explicitly requests it."""
 
 PRESENTATION_REVIEWER_DESC = """presentation_reviewer (Presentation-Reviewer)
@@ -177,9 +177,9 @@ You do not propose fixes — only describe what is wrong and why.
 - Do not seek corroborating evidence — evaluate what the agents present. If the presented evidence is incomplete or contains loopholes, flag this and request better evidence or explanation. If you are unable to follow the evidence, derivation, or explanation, fail the corresponding rubric dimension instead of silently passing it.
 - If your own tools fail, inspect errors/logs and try 2-3 fixes (use "web_search" if needed). If still stuck, stop and report: the error (include related warnings), what you tried and why, and root-cause hypotheses.
 
-Review intensity (specified in the review request; default: thorough):
+Review intensity (specified in the review request; default: quick check):
 - **Quick check**: Check plausibility of results across all rubric dimensions based on what is presented — avoid deep inspection of traces or running verification scripts. If results appear obviously wrong, inconsistent, unintuitive, or surprising, escalate to thorough review.
-- **Thorough review**: Verify everything in detail — check claims against evidence, run verification scripts, inspect code, validate derivations, check documentation and traces.
+- **Thorough review**: Verify everything in detail — check claims against evidence, run verification scripts, inspect code, validate derivations, check documentation and traces. Only use when explicitly requested or escalated from quick check.
 
 The user may specify adjusted quality expectations — apply those when given.
 
@@ -289,7 +289,7 @@ def get_reviewer_node(
         prev_msgs_summary = state.get("prev_msg_summary", None)
         non_summary_start = state.get("non_summary_start", 0) or 0
 
-        prev_msgs = mask_tool_observations(list(state.get("prev_msgs", [])))
+        prev_msgs = list(state.get("prev_msgs", []))
 
         context_msgs = [*prev_msgs, *state.get("messages", [])]
 

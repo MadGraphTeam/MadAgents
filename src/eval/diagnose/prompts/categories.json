@@ -1,0 +1,14 @@
+[
+  {
+    "name": "doc_gap",
+    "description": "The documentation does not cover this topic. The agent had to guess or rely on general knowledge, leading to an error."
+  },
+  {
+    "name": "doc_incorrect",
+    "description": "The documentation contains wrong or outdated information that the agent repeated."
+  },
+  {
+    "name": "doc_ambiguous",
+    "description": "The documentation is unclear or could be read multiple ways, leading to a misinterpretation."
+  }
+]

@@ -14,6 +14,10 @@ output/
 *.sif
 *.img
 config.env
+.credentials.json
+**/.credentials.json
+claude_config/
+**/claude_config/
 .claude/
 claude_code/.config/
 claude_code/archive

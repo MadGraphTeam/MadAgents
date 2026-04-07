@@ -11,6 +11,7 @@ This is the **official implementation** of **MadAgents**.
 
 ## Changelog 🔥
 
+- **[26/04/07]** **Self-improving docs** — MadAgents evaluates itself and refines the MadGraph documentation. See [Self-improving docs](#self-improving-docs). 🔥
 - **[26/03/20]** Released **Claude Code implementation** — run MadAgents as a multi-agent system directly from the terminal, works with a Claude subscription, no API credits needed! See [Quick start (Claude Code)](#quick-start-claude-code). 🔥
 - **[26/03/20]** Added **Anthropic model support** (Claude Opus 4.6, Sonnet 4.6, Haiku 4.5) — switch between OpenAI and Anthropic directly from the UI!
 - **[26/03/20]** New **physics expert** worker for HEP theory and phenomenology, plus **three specialized reviewers** (plan, verification, presentation) for higher-quality answers!
@@ -53,11 +54,7 @@ MadAgents can be used in two modes. Both run inside an Apptainer container.
 
 ### 1) Get the code
 
-Clone or download this repository, then make the scripts executable:
-
-```bash
-chmod +x madrun_code.sh cleanup_madrun.sh image/create_image.sh image/create_overlay.sh
-```
+Clone or download this repository.
 
 ### 2) Build image + overlay
 
@@ -94,11 +91,7 @@ To resume or continue a previous session:
 
 ### 1) Get the code
 
-Clone or download this repository, then make the scripts executable:
-
-```bash
-chmod +x madrun_api.sh cleanup_madrun.sh image/create_image.sh image/create_overlay.sh
-```
+Clone or download this repository.
 
 ### 2) Configure
 
@@ -155,6 +148,24 @@ Apptainer>
 ```
 
 If you don’t see this output, check out [Troubleshooting](#troubleshooting).
+
+---
+
+## Self-improving docs
+
+MadAgents can improve its own MadGraph documentation. Enable doc-editing mode and ask the instance to guide you through it:
+
+```bash
+ENABLE_DOC_EDITING=1 ./madrun_code.sh
+```
+
+```
+> How can I improve the MadGraph documentation?
+```
+
+See [`claude_code/README.md`](claude_code/README.md) for the doc-editing skills the instance has access to.
+
+For automated, batch-style runs (e.g. CI, overnight evaluations), use the host-side Python pipeline at [`eval/`](eval/) instead.
 
 ---
 
@@ -216,22 +227,26 @@ LLM_API_KEY=""
 APPTAINER_DIR="/path/to/apptainer"
 ```
 
-#### Temporary overrides (CLI)
+#### Temporary overrides (environment variables)
 
-You can override values from `config.env` for a single run by passing flags to `madrun_api.sh`:
+You can override any `config.env` value for a single run by setting the variable in the caller environment. Precedence: **caller env > config.env > script defaults**.
 
 ```bash
-./madrun_api.sh --frontend_port 5173 --backend_port 8000
-./madrun_api.sh --output_dir /tmp/madagents_out --run_dir /tmp/madagents_run
+FRONTEND_PORT=6000 BACKEND_PORT=9000 ./madrun_api.sh
+OUTPUT_DIR=/tmp/madagents_out ./madrun_code.sh
 ```
 
-Run `./madrun_api.sh --help` for the full list of supported flags.
+This works for both `madrun_api.sh` and `madrun_code.sh`.
 
 ### Claude Code version
 
 Claude Code handles its own authentication; API keys from `config.env` are not used.
 
 - `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (`claude_code/.config/.claude`)
+- `ENABLE_VERIFY` — enable the verify-claims skill (`0`)
+- `ENABLE_DOC_EDITING` — enable documentation editing skills and agent teams, implies verify (`0`)
+
+See [claude_code/README.md](claude_code/README.md) for details on the available modes, skills, and documentation improvement workflows.
 
 ---
 
@@ -304,7 +319,7 @@ Want a “clean slate” run?
 | --- | --- |
 | `config.env not found` | Run commands from the repo root or copy `config.env.example` to `config.env`. |
 | `apptainer not found` | Install Apptainer or set `APPTAINER_DIR` in `config.env`. |
-| `port already in use` | Choose free ports via `--frontend_port` / `--backend_port`. |
+| `port already in use` | Choose free ports via `FRONTEND_PORT` / `BACKEND_PORT` in `config.env` or as env var overrides. |
 | Build fails | Ensure Apptainer supports `--fakeroot` and you have permissions to use it. |
 | Preinstall build fails | The tarball download URLs in `image/madagents_preinstall.def` may have changed; update them and retry. |
 | `cannot check port availability` | Install `ss`, `lsof`, or `python` so the script can test ports. |
@@ -314,8 +329,8 @@ Want a “clean slate” run?
 ### Multiple runs
 
 MadAgents supports **one run per clone**. For multiple runs, **clone the repo multiple times** and
-use **different ports** for each run. See [Temporary overrides (CLI)](#temporary-overrides-cli) for
-how to set `--frontend_port` and `--backend_port`.
+use **different ports** for each run. See [Temporary overrides (environment variables)](#temporary-overrides-environment-variables) for
+how to set `FRONTEND_PORT` and `BACKEND_PORT`.
 
 ### Port forwarding (remote / cluster)
 
@@ -340,7 +355,7 @@ need to forward:
 3) Open the UI locally in your browser:
 `http://127.0.0.1:5173`
 
-If you changed ports via `--frontend_port` / `--backend_port`, pass those same ports to
+If you changed ports via `FRONTEND_PORT` / `BACKEND_PORT`, pass those same ports to
 `port_forward.sh`.
 
 ### Cluster / HPC notes (build troubleshooting)

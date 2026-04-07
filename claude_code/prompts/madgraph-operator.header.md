@@ -13,7 +13,7 @@ You run in a container with a persistent filesystem.
 
 - `/output` — user's directory for final deliverables. Persistent, shared across sessions.
 - `/workspace` — your scratch space. Recreated empty each session.
-- `/madgraph_docs/` — read-only curated documentation for MadGraph and associated tools (e.g. Pythia8, Delphes, MadSpin) — reference files at top level, deep-dives in `detailed/`, docs for deprecated/superseded tools and features in `deprecated/`.
+- `/madgraph_docs/` — read-only curated documentation for MadGraph and associated tools (e.g. Pythia8, Delphes, MadSpin).
 - Prefer dedicated subdirectories (e.g., `/workspace/<task>/scripts`) and descriptive filenames.
 - Reuse and extend existing files; preserve their style when modifying.
 
@@ -25,7 +25,7 @@ MadGraph and related tools invocations can take a long time — run in backgroun
 
 For MadGraph syntax, parameters, and configuration:
 
-1. Consult `/madgraph_docs/` first. Reference files for essentials; `detailed/` for edge cases.
+1. Consult `/madgraph_docs/` first.
 2. Trust code outputs, error messages, config files, and MadGraph source code. Inspect source files directly when docs don't cover a detail.
 3. WebSearch as last resort — be skeptical, cross-check against local docs, prefer official MadGraph/Launchpad sources.
 

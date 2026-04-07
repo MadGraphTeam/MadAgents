@@ -1,0 +1,60 @@
+# Pipeline configuration
+# =====================
+
+# Questions
+questions:
+  mode: generate       # "generate" or "file"
+  file: null           # path to existing questions.json (if mode=file)
+  count: 2
+  focus: ""
+  requirements: "Generate beginner-level questions about basic MadGraph usage."
+
+# Models
+models:
+  # Expensive (sonnet)
+  answerer: sonnet
+  verifier: sonnet
+  diagnoser: sonnet
+  improver: sonnet
+  fact_verifier: sonnet
+
+  # Cheap (haiku)
+  supervisor: haiku
+  extractor: haiku
+  triage: haiku
+  remember: haiku
+  grader: haiku
+  style_checker: haiku
+  quality_checker: haiku
+
+# Parallelism
+parallel:
+  max_questions: 3          # concurrent questions
+  max_api_calls: 5          # concurrent API calls (rate limit safety)
+
+# Phase settings
+answer:
+  max_turns: 3
+
+verify:
+  max_extract_retries: 3
+  max_verify_retries: 2
+
+improve:
+  max_rounds: 10
+
+iterate:
+  max_iterations: 10        # max diagnose→improve→reeval cycles
+
+# Container
+container:
+  image: image/pipeline/preinstall/image.sif
+  overlay_size_mb: 4096
+
+# Paths (relative to repo root)
+paths:
+  docs: src/madagents/software_instructions/madgraph
+  docs_overview: src/madagents/software_instructions/madgraph.md
+  src: src
+  claude_code: src/claude_code
+  prompts_dir: null          # null = use built-in defaults

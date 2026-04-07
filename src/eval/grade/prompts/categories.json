@@ -1,0 +1,36 @@
+{
+  "grades": [
+    {
+      "name": "CORRECT",
+      "description": "The answer correctly answers the user's question. Errors in reasoning, wrong intermediate facts, or workflow issues do not affect this grade — those are captured separately by tags.",
+      "improve": false
+    },
+    {
+      "name": "INCORRECT",
+      "description": "The answer does not correctly answer the user's question. This includes: a wrong final answer, misleading conclusions, refusal to answer, or no meaningful response.",
+      "improve": true
+    },
+    {
+      "name": "INCONCLUSIVE",
+      "description": "The verification results are insufficient to determine whether the answer is correct or incorrect. Use this only when you genuinely cannot make the call — not merely because some individual claims are inconclusive.",
+      "improve": false
+    }
+  ],
+  "tags": [
+    {
+      "name": "has_mistakes",
+      "description": "The answer contains mistakes — wrong facts, flawed reasoning, incorrect derivations, or wrong intermediate steps — that do not invalidate the final answer to the question.",
+      "improve": true
+    },
+    {
+      "name": "inefficient",
+      "description": "The agent had to spend significant effort that better documentation would have prevented. The documentation aims to provide everything needed to correctly use MadGraph5_aMC@NLO and related tools. Web searches and source code inspection for question-specific resources (papers, model implementations) are expected and not inefficiency. Flag only when the extra effort traces back to a documentation problem.",
+      "improve": true
+    },
+    {
+      "name": "reviewer_corrections",
+      "description": "The agent's internal reviewers (verification-reviewer) caught mistakes during the answering process that required revision before the final answer was produced. Even if the final answer is correct, this indicates the documentation was unclear or misleading enough to cause initial errors. Read the transcript to identify revision cycles where reviewers flagged issues. Do not assign this tag if no transcript is available.",
+      "improve": true
+    }
+  ]
+}

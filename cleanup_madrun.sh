@@ -153,8 +153,16 @@ fi
 if instance_exists "${instance_name}"; then
   "${APPTAINER_BIN}" instance stop "${instance_name}"
   echo "madrun is closed now."
-  exit 0
 fi
+
+# Kill any leftover MCP docs server processes.
+mcp_pids="$(pgrep -f 'docs_server.py' 2>/dev/null || true)"
+if [[ -n "${mcp_pids}" ]]; then
+  echo "Stopping MCP docs server (PIDs: ${mcp_pids})"
+  kill ${mcp_pids} 2>/dev/null || true
+fi
+
+exit 0
 
 echo "madrun is already closed."
 madagents_instances="$(list_madagents_instances)"

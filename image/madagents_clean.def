@@ -2,7 +2,7 @@ Bootstrap: docker
 From: node:22-bookworm
 
 %files
-    requirements-agent.txt /AgentFitter/requirements-agent.txt
+    requirements-agent.txt /opt/requirements-agent.txt
 
 %post
     set -eux
@@ -38,25 +38,23 @@ From: node:22-bookworm
     update-locale LANG=en_US.UTF-8 LC_CTYPE=C.UTF-8
 
     ###########################################
-    ## Setup dirs #############################
+    ## Install agent runtime (system Python) ##
     ###########################################
 
-    mkdir -p /opt/envs /AgentFitter/envs/
+    pip install --no-cache-dir --break-system-packages -r /opt/requirements-agent.txt
+    rm -f /opt/requirements-agent.txt
 
     ###########################################
-    ## Setup venvs ############################
+    ## Setup MAD venv #########################
     ###########################################
 
-    python3 -m venv /AgentFitter/envs/Agent
-    /AgentFitter/envs/Agent/bin/pip install --upgrade pip
-    /AgentFitter/envs/Agent/bin/pip install --no-cache-dir --requirement /AgentFitter/requirements-agent.txt
-
+    mkdir -p /opt/envs
     python3 -m venv /opt/envs/MAD
     /opt/envs/MAD/bin/pip install --upgrade pip
 
 %environment
     # PATH
-    export PATH=/AgentFitter/:/usr/local/bin:/usr/bin:/bin
+    export PATH=/usr/local/bin:/usr/bin:/bin
 
     # Locale
     export LANG=en_US.UTF-8
@@ -67,16 +65,12 @@ From: node:22-bookworm
     export CLI_CMD="bash"
 
     # venvs
-    export AgentVenv=/AgentFitter/envs/Agent
     export MadVenv=/opt/envs/MAD
     export VIRTUAL_ENV=$MadVenv
 
     # Editor
     export EDITOR=nano
     export VISUAL=$EDITOR
-
-    # PYTHONPATH
-    export PYTHONPATH="/AgentFitter${PYTHONPATH:+:$PYTHONPATH}"
 %labels
     Base "debian:12 (bookworm)"
     Purpose "MadAgents Docker"
