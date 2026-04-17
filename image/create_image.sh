@@ -37,8 +37,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$image_type" in
-  preinstall|clean) ;;
-  *) echo "ERROR: --type must be 'preinstall' or 'clean' (got: $image_type)" >&2; exit 2 ;;
+  preinstall|minimal|clean) ;;
+  *) echo "ERROR: --type must be 'preinstall', 'minimal', or 'clean' (got: $image_type)" >&2; exit 2 ;;
 esac
 
 # --- Locate apptainer binary (APPTAINER_DIR or PATH fallback) ---

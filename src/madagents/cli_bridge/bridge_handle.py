@@ -36,7 +36,7 @@ def start_bridge(
     if os.path.exists(dir):
         shutil.rmtree(dir, ignore_errors=True)
     Path(dir).mkdir(parents=True, exist_ok=True)
-    bridge_script = "/AgentFitter/src/madagents/cli_bridge/bridge.py"
+    bridge_script = "/MadAgents/src/madagents/cli_bridge/bridge.py"
 
     cmd = [sys.executable, "-u", bridge_script, "--workdir", dir, "--cmd", cli_cmd, "--stamp-lines", "--use-shell"]
     log_path = os.path.join(dir, "bridge.out")

@@ -14,7 +14,7 @@ from pathlib import Path
 
 def run_npm_install():
     """Install required frontend dependencies and log output to disk."""
-    project_dir = Path("/AgentFitter/src/madagents/frontend/ui")
+    project_dir = Path("/MadAgents/src/madagents/frontend/ui")
     log_path = Path("/runs/logs/npm_install.log")
     log_path.parent.mkdir(exist_ok=True, parents=True)
 

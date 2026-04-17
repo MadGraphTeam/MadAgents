@@ -27,7 +27,7 @@ def _frontend_main(
         try:
             proc = Popen(
                 ["npm", "run", "dev", "--", "--port", str(port), "--host", "127.0.0.1"],
-                cwd="/AgentFitter/src/madagents/frontend/ui",
+                cwd="/MadAgents/src/madagents/frontend/ui",
                 stdout=f,
                 stderr=f,
                 env=env,

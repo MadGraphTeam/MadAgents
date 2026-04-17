@@ -2,6 +2,7 @@ langchain-openai==1.1.6
 langchain-anthropic==1.2.0
 langchain-core==1.2.5
 langgraph==1.0.5
+langgraph-prebuilt==1.0.5
 langgraph-checkpoint-sqlite==3.0.1
 aiosqlite==0.22.1
 pydantic==2.12.5

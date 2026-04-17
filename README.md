@@ -145,6 +145,9 @@ APPTAINER_DIR="/path/to/apptainer/bin"
 # Preinstalled MadGraph stack (ROOT, Pythia8, Delphes)
 ./image/create_image.sh --type preinstall
 
+# Minimal MadGraph stack (ROOT only, no Pythia8/Delphes/HEPTools)
+./image/create_image.sh --type minimal
+
 # Clean base image (no preinstalled tools)
 ./image/create_image.sh --type clean
 ```
@@ -278,11 +281,14 @@ All image definitions and build scripts live in `image/`.
 ./image/create_image.sh --type TYPE
 ```
 
-Two image variants are supported:
+Three image variants are supported:
 
 - **`--type preinstall`** builds from `image/madagents_preinstall.def` and includes a **basic MadGraph stack**
-  (ROOT, Pythia8, Delphes). The build downloads two tarballs; if the upstream links change, you may need
+  (ROOT, Pythia8, Delphes, FastJet, LHAPDF6). The build downloads two tarballs; if the upstream links change, you may need
   to update them in the definition file.
+- **`--type minimal`** builds from `image/madagents_minimal.def` and includes a **minimal MadGraph installation**
+  (MG5_aMC and ROOT only, **no** HEPTools — Pythia8, Delphes, FastJet, LHAPDF6 are skipped). Useful for tree-level
+  matrix-element workflows where showering/detector simulation is not needed; builds faster and produces a smaller image.
 - **`--type clean`** builds from `image/madagents_clean.def` and includes **no preinstalled tools**.
 
 Both options create `image/madagents.sif` and `image/mad_overlay.img` (default size ~10GB), overwriting

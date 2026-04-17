@@ -264,7 +264,7 @@ def _resolve_image_overlay_paths() -> tuple[str, str]:
     project_dir = os.environ.get("PROJECT_DIR")
     if project_dir:
         candidate_dirs.append(os.path.join(project_dir, "image"))
-    candidate_dirs.append("/AgentFitter/image")
+    candidate_dirs.append("/MadAgents/image")
     candidate_dirs.append(os.path.join(os.getcwd(), "image"))
 
     for base_dir in candidate_dirs:
