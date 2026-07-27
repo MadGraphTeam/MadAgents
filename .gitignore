@@ -11,22 +11,31 @@ logs/
 *.db-wal
 run_dir/
 output/
+# Shared scratch for cluster jobs — created by the launcher on a scheduler host,
+# and the one path that means the same thing in the container, on the host and
+# on a compute node. Run data, never config.
+cluster_runs/
 *.sif
 *.img
 config.env
-.credentials.json
-**/.credentials.json
 claude_config/
 **/claude_config/
-.claude/
-claude_code/.config/
-claude_code/archive
-!claude_code/.claude
-!claude_code/.claude/settings.local.json
-!claude_code/CLAUDE.md
-# The assembled Claude Code installer session must be tracked (it is the installer).
-!install/claude_code/.claude/
-!install/claude_code/.claude/**
+# Only the REPO-ROOT .claude/ is local session state. Agent configs deeper in the
+# tree ARE the deliverable — the frozen ones under legacy/, and the preset trees of
+# the current release — so this is anchored with a leading slash rather than
+# matching a directory named .claude at any depth.
+/.claude/
+legacy/madagents_v2/claude_code/.config/
+legacy/madagents_v2/claude_code/archive
+# Claude Code auth / config files — never commit, at any depth. Kept after the
+# rule above so a stray auth file inside a tracked .claude/ tree is still ignored.
+.credentials.json
+**/.credentials.json
+**/.claude.json
+# A committed agent config includes its settings.local.json. Negate here so this
+# survives a global ignore of that filename (~/.config/git/ignore); the root
+# .claude/ is unaffected, since git will not descend into an excluded directory.
+!**/.claude/settings.local.json
 .nfs*
 archive/
 .apptainer_tmp

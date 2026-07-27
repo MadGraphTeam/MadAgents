@@ -1,0 +1,12 @@
+name: madagents
+mount_madgraph_docs: false
+model: null
+reasoning_effort: null
+max_turns: null
+disallowed_tools: []
+append_system_prompt_file: madagents/prompts/lead-discipline.md
+# No /agent_wikis bind: the wiki rides inside the /output project tree at
+# /output/.madagents/wiki/. Omitting the bind is what selects the in-output
+# wiki layout.
+extra_binds: []
+auto_memory_enabled: true

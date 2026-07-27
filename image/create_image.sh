@@ -62,8 +62,13 @@ if [[ -z "${APPTAINER_BIN}" ]]; then
   APPTAINER_BIN="${apptainer_bin}"
 fi
 IMAGES_DIR="${REPO_ROOT}/image"
-SIF_PATH="${IMAGES_DIR%/}/madagents.sif"
-DEF_PATH="${IMAGES_DIR%/}/madagents_${image_type}.def"
+# Each image type owns a folder holding its definition, its CLAUDE.md (the
+# environment description seeded into every run built on this image) and the
+# .sif built from it. Building beside the CLAUDE.md is what lets the launcher
+# find the right one: it reads the CLAUDE.md sitting next to the image it runs.
+TYPE_DIR="${IMAGES_DIR%/}/${image_type}"
+SIF_PATH="${TYPE_DIR}/madagents.sif"
+DEF_PATH="${TYPE_DIR}/image.def"
 IMG_PATH="${IMAGES_DIR%/}/mad_overlay.img"
 
 if [[ ! -f "$DEF_PATH" ]]; then
@@ -87,6 +92,12 @@ echo "  $APPTAINER_BIN build \"$SIF_PATH\" \"$DEF_PATH\""
 )
 echo "Done. Built: $SIF_PATH"
 
+if [[ -f "${TYPE_DIR}/CLAUDE.md" ]]; then
+  echo "Runs on this image are seeded with: ${TYPE_DIR}/CLAUDE.md"
+else
+  echo "NOTE: no ${TYPE_DIR}/CLAUDE.md — runs on this image get the generic seed." >&2
+fi
+
 # --- Build the overlay ---
 if [[ -f "$IMG_PATH" ]]; then
   echo "Found existing overlay at $IMG_PATH — removing it..."
@@ -98,7 +109,7 @@ echo "Building overlay:"
 # the invoking user, so runtime apptainer can use it WITHOUT --fakeroot and
 # the user can still write to /opt, /usr/local, etc. The fakeroot path
 # breaks the host-bind-mounted claude binary (LD_PRELOAD + single-UID
-# namespace deadlock); see madrun_code.sh for context.
+# namespace deadlock); see src/launcher/code.py for context.
 echo "  $APPTAINER_BIN overlay create --sparse --size 10240 \"$IMG_PATH\""
 "$APPTAINER_BIN" overlay create --sparse --size 10240 "$IMG_PATH"
 echo "Done. Built: $IMG_PATH"

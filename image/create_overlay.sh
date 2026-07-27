@@ -47,7 +47,11 @@ if [[ -f "$IMG_PATH" ]]; then
 fi
 
 echo "Building overlay:"
-echo "  $APPTAINER_BIN overlay create --fakeroot --sparse --size 10240 \"$IMG_PATH\""
-"$APPTAINER_BIN" overlay create --fakeroot --sparse --size 10240 "$IMG_PATH"
-# "$APPTAINER_BIN" overlay create --size 1024 "$IMG_PATH"
+# No --fakeroot: produces a per-user overlay whose upper dir is owned by
+# the invoking user, so runtime apptainer can use it WITHOUT --fakeroot and
+# the user can still write to /opt, /usr/local, etc. The fakeroot path
+# breaks the host-bind-mounted claude binary (LD_PRELOAD + single-UID
+# namespace deadlock); see src/launcher/code.py for context.
+echo "  $APPTAINER_BIN overlay create --sparse --size 10240 \"$IMG_PATH\""
+"$APPTAINER_BIN" overlay create --sparse --size 10240 "$IMG_PATH"
 echo "Done. Built: $IMG_PATH"

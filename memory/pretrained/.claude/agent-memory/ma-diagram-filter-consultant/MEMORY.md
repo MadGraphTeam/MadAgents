@@ -1,0 +1,23 @@
+## Slice
+I own diagram-filter operators in process syntax: `/` (forbidden particles), `$` (forbidden on-shell s-channels, sets onshell=False), `$$` (forbidden s-channels incl. off-shell), `> >` (required s-channels). I cover their PARSING in extract_process, the Process fields they fill, and what they CONSTRAIN at the parser/diagram-build level + where the `$` filter's onshell=False becomes gForceBW=2.
+Out of slice: coupling orders, chain-decay `,` (sets onshell=True), NLO `[]`, polarization `{}`, the enumeration algorithm/DiagramTag itself, bwcutoff/on-shell test at integration, gForceBW=2 runtime enforcement in myamp.f.
+
+## Core operating principles
+- Source is truth for THIS input. Adopt a scope-matching cached wiki page per ma-wiki-as-evidence; else walk source. Sanity-check one cited file:line on adoption.
+- `$` vs `$$` is decided by regex precedence: `$$` matched before `$` in extract_process. Don't confuse the two — `$$` drops topology, `$` only vetoes on-shell.
+- The onshell leg field is shared with chain-decay: I write False, chain-decay writes True; both emit via write_decayBW_file. Triangulate gForceBW with chain-decay slice.
+- Pretrained MadGraph recall is hypothesis. Probe runtime predictions; mark unprobed runtime claims as hypothesis.
+
+## Recent lessons (FIFO, max 5)
+- filter-breaks-gauge-boundary: All four operators alter the gauge-invariant diagram SUM (/,$$,>> DROP diagrams; $ swaps propagator treatment) -> can leave Ward cancellation incomplete -> silent gauge-dependence, NO MG5 warning. I own ONLY the source-visible removal mechanism; the gauge-breaking is a physics inference (physics slice) and `check gauge` (do_check madgraph_interface.py:4065 -> process_checks.check_gauge :4622, def process_checks.py:3060; NOT the :1643/:3000 arg-validation lines) is process-syntax slice's command. Trigger: "does filtering break gauge / check gauge" — confirm mechanism, hand off physics verdict + the command. See diagram-filter-enforcement gauge caution.
+- slash-internal-only-not-external: `/` filter tests `vertex.get('legs')[-1]` = the FRESHLY-MERGED OUTGOING (internal) leg (merge_comb_legs appends it LAST, diagram_generation.py:1218-1221); external process legs enter as `curr_leglist` inputs, never the tested `[-1]`. So `/` forbids INTERNAL propagators only (s- AND t-channel), NEVER external/final-state legs. Page diagram-filter-enforcement had said "internal or external" — WRONG, superseded. abs is at :1018 (field name on :1019; a cite of :1019 is off by one). Trigger: any "/ forbids X" claim — say internal-propagator-only, not "any leg".
+- partial-filter-leak-topology-gate: gating a final state to ONE mediator needs EVERY internal propagator reaching it forbidden; a single `/` is a partial gate that SILENTLY leaks. WW-only H→ττνν: `/ z` alone leaves Yukawa+W hybrids (nonzero FFS4_3 calls survive); `/ ta+ z` drives FFS4_3 to 0 (fully gated). TELL = FFS4_3/GC_99 Yukawa-vertex-call count (read fresh), not just diagram count. Trigger: "forbid the X-mediated topology" — enumerate all reaching propagators.
+- memory-path-divergence: canonical auto-loaded MEMORY.md is .claude/agent-memory/ma-diagram-filter-consultant/MEMORY.md; a stale 0-byte stub also sits at .madagents/wiki/.claude/agent-memory/.../MEMORY.md. Trigger: editing MEMORY.md — write only the /output path; do NOT populate the .madagents/wiki stub (would fork the index).
+
+## Wiki page index
+- parse-filter-operators: How extract_process parses the four diagram-filter operators (/, $, $$, > >) and which Process field each captures.
+- diagram-filter-enforcement: How the four captured filter fields constrain diagram enumeration in diagram_generation.py (drop vs mark-onshell-False).
+- dollar-filter-helas-realization: $-filter onshell=False rides Leg->HelasWavefunction, emits P1D ("DOLLAR") propagator routine + extra BWCUTOFF arg in ME code, zeroes s_pdg in ME-identity hash; distinct from gForceBW=2. Probe-confirmed.
+- schannel-config-carrier-and-sprop: onshell=False rides get_s_and_t_channels into write_decayBW_file (gForceBW); sprop/iforest written to configs.inc ($ never zeroes sprop); full myamp.f cut_bw logic for gForceBW=2 (gated on onshell-window AND sde_strat==1). Probe-confirmed.
+- filter-shell-string-naming: Which operators appear in the subprocess directory name (shell_string) — `/`->`_no_X`, `> >`->`_Z_`; `$`/`$$` INVISIBLE (same dir name as unfiltered). Probe-confirmed.
+- filter-operator-visibility-matrix: The four operators differ along a VISIBILITY axis (which build artifact each surfaces in); answers "from artifact X, which operators are detectable?" `$` is name-invisible but ME-code/config-invasive. Probe-confirmed.

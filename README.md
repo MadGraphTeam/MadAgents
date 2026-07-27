@@ -5,391 +5,271 @@
 This is the **official implementation** of **MadAgents**.
 
 - 📄 Paper: [arXiv:2601.21015](https://arxiv.org/abs/2601.21015)
-- 📦 Supplementary material: `supplementary/`
+- 📦 Supplementary material: [`supplementary/`](supplementary)
+- 🗄️ Superseded releases: [`legacy/`](legacy)
 
 ---
 
 ## Changelog 🔥
 
-- **[26/06/08]** **Repo-native install + Codex support** — install MadAgents into your own repo and run it directly with **Claude Code or Codex**, no container needed. This is now the recommended setup. See [Quick start](#quick-start-install-into-your-repo). 🔥
-- **[26/04/07]** **Self-improving docs** — MadAgents evaluates itself and refines the MadGraph documentation. See [Self-improving docs](#self-improving-docs). 🔥
-- **[26/03/20]** Released **Claude Code implementation** — run MadAgents as a multi-agent system directly from the terminal, works with a Claude subscription, no API credits needed! See [Containerized version](#containerized-version-apptainer-sandbox). 🔥
-- **[26/03/20]** Added **Anthropic model support** (Claude Opus 4.6, Sonnet 4.6, Haiku 4.5) — switch between OpenAI and Anthropic directly from the UI!
-- **[26/03/20]** New **physics expert** worker for HEP theory and phenomenology, plus **three specialized reviewers** (plan, verification, presentation) for higher-quality answers!
-- **[26/03/20]** **Parallel worker dispatch** — the orchestrator now runs multiple workers concurrently, with full agent traces and an expanded MadGraph documentation library.
+- **[26/07/28]** **MadAgents v3** — a new multi-agent system consisting of over 40 specialists, which you can run in a container or install straight into a folder. See [Two ways to run it](#two-ways-to-run-it), [Memory](#memory) and [Skills](#skills) for details. 🔥
+- **[26/04/07]** Self-improving docs — MadAgents evaluates itself and refines the MadGraph documentation. *(now in [`legacy/madagents_v2/`](legacy/madagents_v2))*
+- **[26/03/20]** Released the first Claude Code implementation — run MadAgents from the terminal with a Claude subscription, no API credits needed. *(now in [`legacy/madagents_v2/`](legacy/madagents_v2))*
+- **[26/03/20]** Added Anthropic model support, a physics-expert worker, three specialized reviewers, and parallel worker dispatch to the web version. *(now in [`legacy/madagents_v1/`](legacy/madagents_v1))*
 
 ---
 
 ## What can I do with MadAgents?
 
-MadAgents is a set of **communicative agents** that support **MadGraph-centered HEP workflows**, including:
+MadAgents is a set of **communicative agents** that support **MadGraph-centered HEP workflows**:
 
-- **Install & configure** complex HEP toolchains
-- **Teach & guide** users with step-by-step, executable instructions
-- **Answer physics + implementation questions** and translate them into runnable workflows  
-- **Run autonomous multi-step campaigns** and organize outputs + logs
-
----
-
-## Ways to run MadAgents
-
-The **recommended** way installs MadAgents into your own repo so it runs as a normal
-coding-agent session — with **Claude Code or Codex**, no container required. Two alternatives
-remain for a sandboxed stack or a browser UI.
-
-| | **Install (recommended)** | Containerized | Web UI / API |
-| --- | --- | --- | --- |
-| **Interface** | Terminal (Claude Code or Codex) | Terminal (Claude Code) | Web UI (browser) |
-| **Runs** | In your repo (bare) | Apptainer sandbox | LangGraph + FastAPI |
-| **Setup** | `cd install/… && <agent>` | Apptainer + image build | API keys + Apptainer |
-| **Auth** | Claude or Codex sign-in | Claude subscription / credits | OpenAI / Anthropic keys |
-| **Entry point** | [`install/`](install/) | `madrun_code.sh` | `madrun_api.sh` |
+- **Build MadGraph setups** from a physics request — process line, model, parameters, cuts, scales,
+  decay chains, EFT orders, LO/NLO
+- **Check its own work by running it**, rather than only reasoning about it
+- **Ground answers in MG5 source** instead of recall: it caches *where to look*, then reads the
+  value fresh, so a version-dependent number is never stale
+- **Learn** — findings go into a wiki the next session starts from
 
 ---
 
-## Quick start (install into your repo)
+## Two ways to run it
 
-Set MadAgents up in any repo using whichever coding agent you prefer, targeting whichever agent
-will run it. No Apptainer and no image build — the agent installs MadGraph itself when a task needs it.
+You can run MadAgents **in a container** or **installed into a folder**. The agent system is
+identical either way — the roster, the skills, the memory. What differs is what surrounds it, and
+neither one is the real version:
 
-### 0) Requirements
+| | `./madrun.sh` | `install/` |
+| --- | --- | --- |
+| Apptainer | required | not used |
+| MadGraph | comes with the image | yours, wherever you have it |
+| Runs in | a container, one run per instance | any folder on your machine |
+| Deliverables | `<instance>/output/` | the folder itself |
+| Isolation | container + a fresh per-run overlay | none — your filesystem, your permissions |
+| Fits when | you have no MadGraph, or want runs disposable and isolated | you already have MadGraph, or cannot install Apptainer |
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** or **[Codex](https://developers.openai.com/codex)** CLI, installed and authenticated.
-- **git** (the installer locates the MadAgents source via the repo).
-
-### 1) Get the code
-
-Clone or download this repository.
-
-### 2) Run the installer
-
-Open the installer with the agent of your choice, then ask it to install MadAgents:
-
-```bash
-cd install/claude_code && claude     # installer running as Claude Code → /install-madagents
-# or
-cd install/codex && codex            # installer running as Codex → ask it to install MadAgents
-```
-
-It asks **which agent** the target should run (Claude Code or Codex) and **which repo** to set up,
-then writes the configuration plus a `start_madagents.sh` launcher there.
-
-### 3) Launch MadAgents
-
-```bash
-cd <your-repo>
-./start_madagents.sh                 # launches claude or codex with the MadAgents setup
-```
-
-### Updating
-
-Re-run the installer and use **`/update-madagents`**. It does a 3-way merge that preserves any
-edits you made to the installed files.
-
-See [`install/README.md`](install/README.md) for details and
-[`install/data/madagents/`](install/data/madagents/) for the provider-agnostic schema + adapters.
-
-> Prefer a sandbox or a browser UI instead? See **[Containerized version](#containerized-version-apptainer-sandbox)**
-> and **[Web UI / API version](#web-ui--api-version)** below.
+Pick whichever suits the machine you are on; both are first-class, and one clone gives you both.
 
 ---
 
-## Containerized version (Apptainer sandbox)
+## Quick start
 
-> A **sandboxed, reproducible** environment with the MadGraph stack preinstalled — handy on HPC, or to keep installs isolated from your host. Runs the Claude Code version inside Apptainer. This is also the mode used for [Self-improving docs](#self-improving-docs) and the batch [`eval/`](eval/) pipeline.
+Both paths need a **Linux host** (or a Linux VM on Windows/macOS, see
+[Install Apptainer](#install-apptainer)) and the
+**[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)**, installed and authenticated
+— a Claude subscription or API credits both work. Clone or download this repository, then take
+either branch.
 
-### 0) Requirements
+### A) In a container — `./madrun.sh`
 
-- **Linux host** (or a Linux VM on Windows/macOS, see [Install Apptainer](#install-apptainer))
-- **[Apptainer](https://apptainer.org/)** installed on the host (see [Install Apptainer](#install-apptainer))
-- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** installed and authenticated (works with a Claude subscription or API credits)
-
-### 1) Get the code
-
-Clone or download this repository.
-
-### 2) Build image + overlay
+Also needs **[Apptainer](https://apptainer.org/)** on the host. Brings its own MadGraph, so this is
+the path that works on a machine with no HEP stack at all.
 
 ```bash
-# Preinstalled MadGraph stack (ROOT, Pythia8, Delphes)
-./image/create_image.sh --type preinstall
+cp config.env.example config.env              # set APPTAINER_DIR and CLAUDE_CONFIG_DIR
+./image/create_image.sh --type preinstall     # MadGraph + ROOT + Pythia8 + Delphes
+./madrun.sh
 ```
 
-See [Build image](#build-image) for more options.
-
-### 3) Run
+`madrun.sh` offers a menu — start a new run, resume one, or fork one — then builds that run, starts
+the container, and launches Claude Code inside it with the agent system and the memory you chose
+already in place. Anything it does not recognise is forwarded to `claude`:
 
 ```bash
-./madrun_code.sh
+./madrun.sh --list                                    # your runs
+./madrun.sh --new --name ttbar --memory pretrained    # skip the menu
+./madrun.sh --fork run_dir/instances/ttbar__<stamp>   # inherit a run's memory
+./madrun.sh --resume                                  # forwarded to claude
 ```
 
-To resume or continue a previous session:
+Each run is a self-contained folder under `run_dir/instances/` with its own memory, overlay and
+lock — so different runs work concurrently, and the same run cannot be started twice. Deliverables
+land in `<instance>/output/`. See [Build image](#build-image) for the other image types.
+
+### B) In a folder — `install/`
+
+No Apptainer, no image, no `config.env`. Uses the MadGraph you already have.
 
 ```bash
-./madrun_code.sh --resume              # Pick from past sessions
-./madrun_code.sh --continue            # Continue most recent session
+./install/madinstall.sh                                        # guided: asks where, and which memory
+python3 install/installer.py ~/my-study --memory pretrained    # or straight to it
+
+cd ~/my-study && ./madagents.sh
 ```
 
-> Tip: any `config.env` value can be overridden for a single run via an environment variable, e.g. `ENABLE_DOC_EDITING=1 ./madrun_code.sh`. See [Temporary overrides](#temporary-overrides-environment-variables).
+An install *is* the folder you work in: the agent system, the memory you picked, and a
+`madagents.sh` that starts a session there. The one thing it cannot bring is MadGraph — it records
+that the location is unknown and lets the first session find it and write it down. Details:
+[`install/README.md`](install/README.md).
+
+> Tip, either way: the shipped system pre-approves nothing, so a plain run asks before each tool
+> use. A container run has your home directory mounted; an install has no sandbox at all. Skipping
+> those checks (`--dangerously-skip-permissions`) is a real decision — make it explicitly, per run.
 
 ---
 
-## Self-improving docs
+## Skills
 
-MadAgents can improve its own MadGraph documentation. Enable doc-editing mode and ask the instance to guide you through it:
+You can invoke any of these by name, and MadAgents reaches for them on its own when a task calls
+for one.
 
-```bash
-ENABLE_DOC_EDITING=1 ./madrun_code.sh
-```
-
-```
-> How can I improve the MadGraph documentation?
-```
-
-> **Host requirements:** doc-editing mode launches an MCP server (`claude_code/mcp/docs_server.py`) on the **host**, not inside the container. The host Python environment must therefore have the dependencies from [`requirements-agent.txt`](requirements-agent.txt) installed. Set up a venv or conda env, install them, and activate it before running `madrun_code.sh`, e.g.:
-> ```bash
-> python3 -m venv .venv && source .venv/bin/activate
-> pip install -r requirements-agent.txt
-> ENABLE_DOC_EDITING=1 ./madrun_code.sh
-> ```
->
-> **Port:** the MCP server listens on **TCP 8089** on the host by default. Override with `MCP_PORT` (in `config.env` or as a one-shot env var) if that port is taken:
-> ```bash
-> MCP_PORT=9089 ENABLE_DOC_EDITING=1 ./madrun_code.sh
-> ```
-> If the chosen port is in use, the MCP server will fail to start — check `run_dir/workdirs/<stamp>/logs/mcp_docs_server.log`.
-
-See [`claude_code/README.md`](claude_code/README.md) for the doc-editing skills the instance has access to.
-
-For automated, batch-style runs (e.g. CI, overnight evaluations), use the host-side Python pipeline at [`eval/`](eval/) instead.
+| Skill | What it does |
+| --- | --- |
+| **`/mg-setup`** | Builds the MG5 setup for your request |
+| **`/mg-probe`** | Tests a setup by running it |
+| **`/mg-deep-verify`** | A thorough re-check, when you want one |
+| **`/mg-study`** | Reads up on a topic before you need it |
+| **`/ma-wiki-write`** | Saves what it worked out, for next time |
+| **`/ma-wiki-lint`** | Tidies its notes |
+| **`/ma-reflect`** | Fixes a mistake so it stops recurring |
+| **`/ma-doctor`** | Reviews its own setup, with your approval |
 
 ---
 
-## Web UI / API version
+## Memory
 
-> A browser UI backed by LangGraph + FastAPI, using OpenAI/Anthropic **API keys** (not a coding-agent CLI).
+MadAgents remembers in two tiers:
 
-### 0) Requirements
+- **Memory** — a short file per specialist, **always loaded**. Its operating principles, its recent
+  lessons, and an index of its wiki pages.
+- **Wiki** — the long-form pages, **read on demand**. A specialist matches the index in its memory
+  file against the task at hand and opens only the pages that apply.
 
-- **Linux host** (or a Linux VM on Windows/macOS, see [Install Apptainer](#install-apptainer))
-- **[Apptainer](https://apptainer.org/)** installed on the host (see [Install Apptainer](#install-apptainer))
-- **OpenAI or Anthropic API key**
-- **Network access** to OpenAI/Anthropic endpoints
+The split is what makes a large body of knowledge affordable: what is always in context stays
+short, and the detail is fetched only when it is relevant.
 
-### 1) Get the code
+A **memory pack** is what those two tiers hold at the start — of a run, or of an install:
 
-Clone or download this repository.
-
-### 2) Configure
-
-Copy `config.env.example` to `config.env` in the repo root, then edit:
-
-```dotenv
-OPENAI_API_KEY="your-openai-key"
-ANTHROPIC_API_KEY="your-anthropic-key"
-LLM_API_KEY=""
-APPTAINER_DIR="/path/to/apptainer/bin"
-```
-
-> **WARNING:** Do **not** commit real keys. Keep `config.env` local and git-ignored.
-
-### 3) Build image + overlay
+| Pack | Contains | For |
+| --- | --- | --- |
+| `pretrained` *(default)* | memory + wiki for MG5 | Anthropic models |
+| `pretrained-local` | the same, plus harness know-how | a self-hosted model |
+| `bare-local` | harness know-how only | a self-hosted model, cold domain |
+| `none` | nothing — both tiers empty | the shipped system as-is |
 
 ```bash
-# Preinstalled MadGraph stack (ROOT, Pythia8, Delphes)
-./image/create_image.sh --type preinstall
+./madrun.sh --list-memory                 # what each option carries
+./madrun.sh --new --memory none           # start completely cold
 
-# Minimal MadGraph stack (ROOT only, no Pythia8/Delphes/HEPTools)
-./image/create_image.sh --type minimal
-
-# Clean base image (no preinstalled tools)
-./image/create_image.sh --type clean
+python3 install/installer.py --list-memory              # the same packs, for an install
+python3 install/installer.py ~/my-study --memory none
 ```
 
-Creates:
-- `image/madagents.sif` (Apptainer image)
-- `image/mad_overlay.img` (overlay; persists container-side changes across runs)
+A pack is **copied** in, so a session extends its own copy and the shipped pack stays fixed. Fork a
+finished run to carry its accumulated memory into the next one.
+Details: [`memory/README.md`](memory/README.md).
 
-### 4) Run
-
-```bash
-./madrun_api.sh
-```
-
-By default, the output is written to `./output` in the repository root.
-
-Both `madrun_api.sh` and `madrun_code.sh` handle cleanup on exit. `cleanup_madrun.sh` is an optional cleanup helper that works for both and can be run at any time, but it is usually unnecessary unless a run is stuck or your terminal died:
-
-```bash
-./cleanup_madrun.sh
-```
-
-> Tip: any `config.env` value can be overridden for a single run via an environment variable, e.g. `FRONTEND_PORT=6000 ./madrun_api.sh`. See [Temporary overrides](#temporary-overrides-environment-variables).
-
----
-
-## Startup output — API version (what you should see)
-
-When you run `./madrun_api.sh` (from the repo root), the CLI should look like:
-
-```
-Starting MadAgents ...
-Backend: http://127.0.0.1:8000
-Frontend: http://127.0.0.1:5173
-Apptainer>
-```
-
-If you don’t see this output, check out [Troubleshooting](#troubleshooting).
-
----
-
-## Install Apptainer
-
-We use **Apptainer** because it can *often* be installed and used **without sudo** (rootless / unprivileged), which is especially convenient on **HPC / computing clusters** where users typically do not have administrator rights.
-
-Please follow the official documentation:
-- **Official installation guide (all methods):** https://apptainer.org/docs/admin/main/installation.html
-- **No-sudo (unprivileged) installation:** https://apptainer.org/docs/admin/main/installation.html#install-unprivileged-from-pre-built-binaries
-
-On **Windows** and **macOS**, Apptainer does not run natively; you’ll need a **Linux VM** (recommended: **WSL2** on Windows, **Lima** on macOS):
-- https://apptainer.org/docs/admin/main/installation.html#installation-on-windows-or-mac
-
-If installation is **not possible in your environment** (e.g., required kernel features are disabled or local policy restricts installs), please contact your **cluster/system administrator** and request a site-wide Apptainer installation or the required system features.
+The two `-local` packs are for running on a model you host yourself — see
+[`local/README.md`](local/README.md).
 
 ---
 
 ## Configuration
 
-Both modes read `config.env` from the repo root. Relative paths are resolved from the repo root.
-Use `config.env.example` as the template if `config.env` is missing.
+Container runs read `config.env` from the repo root; use `config.env.example` as the template if it
+is missing, and note that relative paths resolve from the repo root. An install needs none of this
+— it is configured by what the installer writes into the folder.
 
-### Global settings (both modes)
+- `APPTAINER_DIR` — directory containing the `apptainer` binary. The only value most setups need.
+- `CLAUDE_CONFIG_DIR` — your Claude Code config dir (e.g. `~/.claude`). Effectively required: it is
+  where the session's login and accepted-trust state live.
+- `APPTAINER_IMAGE`, `OUTPUT_DIR`, `RUN_DIR` — defaults for a bare run; a run instance sets its own.
+- `BIND_SLURM` — bind the host's SLURM config and munge socket so the container's `sbatch`/`squeue`
+  reach the same controller. Empty or `auto` binds when the host looks like a submit host.
 
-- `APPTAINER_DIR` — directory containing the `apptainer` binary (required by `image/create_image.sh`).
-- `APPTAINER_IMAGE` — path to the Apptainer `.sif` image (`image/madagents.sif`). Useful when sharing a prebuilt image from a common location instead of the per-clone default.
-- `APPTAINER_OVERLAY` — path to the writable overlay image (`image/mad_overlay.img`).
-- `OUTPUT_DIR` — outputs folder (`output`)
-- `RUN_DIR` — runtime folder for logs, locks, sockets (`run_dir`)
-
-> Relative paths for `APPTAINER_IMAGE` / `APPTAINER_OVERLAY` resolve against the repo root; absolute paths are used as-is.
-
-### API version
-
-#### Required
-
-Provide at least one API key; provider-specific keys take precedence over `LLM_API_KEY`.
-
-- `OPENAI_API_KEY` — OpenAI API key (preferred for OpenAI models if set).
-- `ANTHROPIC_API_KEY` — Anthropic API key (preferred for Anthropic models if set).
-- `LLM_API_KEY` — fallback API key when provider-specific keys are not set.
-
-#### Optional (defaults shown)
-
-- `FRONTEND_PORT` — UI port (`5173`)
-- `BACKEND_PORT` — API port (`8000`)
-- `APPTAINER_CACHEDIR` — Apptainer cache (`.apptainer/cache`)
-- `APPTAINER_CONFIGDIR` — Apptainer config (`.apptainer`)
-- `NPM_CONFIG_CACHE` — npm cache (`.npm`)
-
-#### Model defaults
-
-- Agents use GPT‑5.1 models by default, except the Plan‑Updater which uses GPT‑5‑mini.
-- You can change all model selections from the UI; provider is inferred from the model name (`gpt-*` → OpenAI, `claude-*` → Anthropic).
-
-#### Minimal example
-
-```dotenv
-OPENAI_API_KEY="your-openai-key-here"
-ANTHROPIC_API_KEY=""
-LLM_API_KEY=""
-APPTAINER_DIR="/path/to/apptainer"
-```
-
-### Claude Code version
-
-Claude Code handles its own authentication; API keys from `config.env` are not used.
-
-- `CLAUDE_CONFIG_DIR` — Claude Code configuration directory (`claude_code/.config/.claude`)
-- `ENABLE_VERIFY` — enable the verify-claims skill (`0`)
-- `ENABLE_DOC_EDITING` — enable documentation editing skills and agent teams, implies verify (`0`)
-
-See [claude_code/README.md](claude_code/README.md) for details on the available modes, skills, and documentation improvement workflows.
+No API keys here: Claude Code authenticates itself, and `*_API_KEY` / `*_AUTH_TOKEN` variables are
+actively stripped from the container environment.
 
 ### Temporary overrides (environment variables)
 
-Any value in `config.env` can be overridden for a single run by setting the variable in the caller environment. This works for both `madrun_api.sh` and `madrun_code.sh`. Precedence: **caller env > config.env > script defaults**.
+Any value in `config.env` can be overridden for a single run by setting the variable in the caller
+environment. Precedence: **caller env > config.env > script defaults**.
 
 ```bash
-FRONTEND_PORT=6000 BACKEND_PORT=9000 ./madrun_api.sh
-OUTPUT_DIR=/tmp/madagents_out ./madrun_code.sh
-ENABLE_DOC_EDITING=1 ./madrun_code.sh
+OUTPUT_DIR=/tmp/madagents_out ./madrun.sh
 ```
 
 ---
 
 ## Build image
 
-All image definitions and build scripts live in `image/`.
-
 ```bash
-./image/create_image.sh --type TYPE
+./image/create_image.sh --type preinstall   # MG5_aMC + ROOT + Pythia8 + Delphes + FastJet + LHAPDF6
+./image/create_image.sh --type minimal      # MG5_aMC + ROOT only — faster build, smaller image
+./image/create_image.sh --type clean        # no preinstalled tools
+./image/create_overlay.sh                   # rebuild just the base overlay
 ```
 
-Three image variants are supported:
+Each image type owns a folder — `image/preinstall/`, `image/minimal/`, `image/clean/` — holding its
+definition, the `.sif` built from it, and a `CLAUDE.md` describing what that build installs and
+where. `--type preinstall` therefore produces `image/preinstall/madagents.sif`, and the launcher
+runs whichever type is built (`APPTAINER_IMAGE` overrides). A base overlay
+`image/mad_overlay.img` (~10 GB, sparse) is written alongside; each run instance then gets a fresh
+sparse overlay of its own, which is what lets instances run concurrently.
 
-- **`--type preinstall`** builds from `image/madagents_preinstall.def` and includes a **basic MadGraph stack**
-  (ROOT, Pythia8, Delphes, FastJet, LHAPDF6). The build downloads two tarballs; if the upstream links change, you may need
-  to update them in the definition file.
-- **`--type minimal`** builds from `image/madagents_minimal.def` and includes a **minimal MadGraph installation**
-  (MG5_aMC and ROOT only, **no** HEPTools — Pythia8, Delphes, FastJet, LHAPDF6 are skipped). Useful for tree-level
-  matrix-element workflows where showering/detector simulation is not needed; builds faster and produces a smaller image.
-- **`--type clean`** builds from `image/madagents_clean.def` and includes **no preinstalled tools**.
+The `CLAUDE.md` beside an image is the environment description every run built on it starts from —
+see [Data, outputs, and persistence](#data-outputs-and-persistence).
 
-Both options create `image/madagents.sif` and `image/mad_overlay.img` (default size ~10GB), overwriting
-any existing files with the same names.
+The preinstall build downloads two tarballs; if the upstream links move, update them in
+`image/preinstall/image.def`.
 
-**Notes**
-- The build uses `apptainer build --fakeroot`. If your system disallows fakeroot, see
-  [Troubleshooting](#troubleshooting).
-- If you only need to rebuild the overlay, run:
+---
 
-```bash
-./image/create_overlay.sh
-```
+## Install Apptainer
+
+Only the container path needs Apptainer — if you already have MadGraph, [install into a
+folder](#b-in-a-folder--install) instead and skip this. The Windows/macOS note below applies to
+both paths, though: MadAgents runs on Linux either way.
+
+We use Apptainer because it can *often* be installed and run **without sudo** (rootless), which
+matters on HPC clusters where users have no admin rights.
+
+- [Installation guide](https://apptainer.org/docs/admin/main/installation.html)
+- [Unprivileged install from pre-built binaries](https://apptainer.org/docs/admin/main/installation.html#install-unprivileged-from-pre-built-binaries)
+- [Windows / macOS](https://apptainer.org/docs/admin/main/installation.html#installation-on-windows-or-mac) — needs a Linux VM (WSL2 on Windows, Lima on macOS)
+
+If installation is not possible in your environment, ask your cluster administrator for a site-wide
+Apptainer install.
 
 ---
 
 ## Stop / cleanup
 
-Both `madrun_api.sh` and `madrun_code.sh` trap exit signals and stop the Apptainer instance automatically.
-`cleanup_madrun.sh` is safe to run at any time for either variant, but it is usually unnecessary unless the process is wedged or your terminal died:
+Only container runs need this — an install has no instance to stop; closing the session is all.
+
+A run stops its own Apptainer instance on exit. `cleanup_madrun.sh` is for a wedged run or a dead
+terminal:
 
 ```bash
 ./cleanup_madrun.sh
 ```
 
-Manual fallback:
-
-```bash
-apptainer instance list
-apptainer instance stop INSTANCE_NAME
-```
-
-The `INSTANCE_NAME` is recorded in `run_dir/logs/instance_name.txt` (API version) or `run_dir/workdirs/<stamp>/logs/instance_name.txt` (Claude Code version) and is usually `madagents` or `madagents-cc`.
+Manual fallback: `apptainer instance list`, then `apptainer instance stop INSTANCE_NAME`.
 
 ---
 
 ## Data, outputs, and persistence
 
-- `OUTPUT_DIR` is where runtime outputs are written.
-- `RUN_DIR` holds logs, locks, and instance metadata and can be deleted when you are done.
-- The container is launched with an overlay (`image/mad_overlay.img`) so changes inside the container
-  persist across runs until you rebuild or delete the overlay.
+An install keeps all of this in the installed folder itself, which is the session's project root:
+deliverables beside `.madagents/wiki/`, and its own `CLAUDE.md`. For a container run:
 
-Want a “clean slate” run?
-1. Stop the instance (`./cleanup_madrun.sh`)
-2. Delete the overlay (`rm image/mad_overlay.img`)
-3. Recreate it (`./image/create_overlay.sh`), and optionally rebuild the `.sif`
+- `<instance>/output/` is the session's project root — deliverables and the wiki land there.
+- `<instance>/output/CLAUDE.md` describes the filesystem the session works in: where it starts,
+  where scratch is, and what the image installed. It is seeded once when the run is created, copied
+  from the `CLAUDE.md` beside the image being used, and belongs to the session from then on — the
+  overlay is writable, so what is installed drifts from what the image shipped, and the session is
+  asked to keep the description current. Nothing overwrites its edits.
+- `<instance>/run/` holds logs and the run lock, and can be deleted when you are done.
+- Each instance carries **its own** overlay (`<instance>/overlay.img`), so changes inside the
+  container persist across restarts of that run — and two runs never fight over one overlay.
+
+Want a "clean slate" run? Start a fresh instance rather than deleting anything:
+
+```bash
+./madrun.sh --new --memory none
+```
+
+That gives you a new overlay, an empty learned tier and an empty `output/`, leaving every existing
+run untouched.
 
 ---
 
@@ -397,69 +277,22 @@ Want a “clean slate” run?
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| `config.env not found` | Run commands from the repo root or copy `config.env.example` to `config.env`. |
-| `apptainer not found` | Install Apptainer or set `APPTAINER_DIR` in `config.env`. |
-| `port already in use` | Choose free ports via `FRONTEND_PORT` / `BACKEND_PORT` in `config.env` or as env var overrides. |
-| Build fails | Ensure Apptainer supports `--fakeroot` and you have permissions to use it. |
-| Preinstall build fails | The tarball download URLs in `image/madagents_preinstall.def` may have changed; update them and retry. |
-| `cannot check port availability` | Install `ss`, `lsof`, or `python` so the script can test ports. |
-| No UI link printed | Check `run_dir/logs/madagents_links.txt` and `run_dir/logs/madrun.log`. |
-| UI not reachable from your browser | If running on a cluster or remote machine, you must **port‑forward** the backend and frontend ports (see `port_forward.sh`). |
-
-### Multiple runs
-
-MadAgents supports **one run per clone**. For multiple runs, **clone the repo multiple times** and
-use **different ports** for each run. See [Temporary overrides (environment variables)](#temporary-overrides-environment-variables) for
-how to set `FRONTEND_PORT` and `BACKEND_PORT`.
-
-### Port forwarding (remote / cluster)
-
-If you run MadAgents on a **remote machine or cluster**, the UI will not be reachable from your
-local browser until you **port‑forward** the backend and frontend ports.
-
-This repo includes a helper script: `port_forward.sh`.
-
-1) Edit `port_forward.sh` and set `SSH_TARGET` to your SSH destination, e.g.:
-
-```bash
-SSH_TARGET="user@remote-host"
-```
-
-2) Run the script **from your local machine (the one with the browser)** and pass the ports you
-need to forward:
-
-```bash
-./port_forward.sh --port 8000,5173
-```
-
-3) Open the UI locally in your browser:
-`http://127.0.0.1:5173`
-
-If you changed ports via `FRONTEND_PORT` / `BACKEND_PORT`, pass those same ports to
-`port_forward.sh`.
-
-### Cluster / HPC notes (build troubleshooting)
-
-Apptainer is commonly used on clusters because **running containers does not require sudo** once installed.
-Installation itself may still require admin help.
-
-**If `--fakeroot` works**  
-✅ Build normally with `./image/create_image.sh`.
-
-**If `--fakeroot` is not allowed**  
-Typical options:
-1. **Use a prebuilt `.sif`**: build on a machine that supports fakeroot and distribute the image
-   (e.g. GitHub Releases or a shared cluster filesystem).
-2. Ask admins about enabling user namespaces / fakeroot (policy-dependent).
+| An install cannot find MadGraph | Nothing points it there yet. Write the path into the folder's `CLAUDE.md`, or let the session find it and record it. |
+| An install came up with no memory | Either the folder is not its own git root — Claude Code then resolves the project root to the enclosing repository and reads the slates from there; fix with `git init` in the folder — or it was moved and `madagents.sh` could not re-point auto-memory because `python3` is not on `PATH`. |
+| An install behaves like plain Claude Code | Started with a bare `claude`. Use `./madagents.sh`: it is what appends the lead's system prompt. |
+| `config.env not found` | Run from the repo root, or copy `config.env.example` to `config.env`. |
+| `apptainer not found` | Install Apptainer, or set `APPTAINER_DIR` in `config.env`. |
+| Build fails | The build uses `apptainer build --fakeroot`. If your site disallows fakeroot, build elsewhere and share the `.sif` via `APPTAINER_IMAGE`, or ask admins about enabling user namespaces. |
+| Preinstall build fails | Tarball URLs in `image/preinstall/image.def` may have moved — update and retry. |
+| The run says it cannot take the lock | That instance is already running. Use another instance, or `./cleanup_madrun.sh`. |
+| None of the memory loaded | `autoMemoryEnabled` is pinned per instance; check it was not overridden in your own Claude config. See [`memory/README.md`](memory/README.md). |
 
 ---
 
-## Security
+## Legacy releases
 
-- `config.env` contains secrets (OpenAI API key). Treat it like a password.
-- `config.env.example` is a safe template and can be committed.
-- Do not commit real keys to version control.
-- Logs may contain request metadata; store them appropriately.
+Earlier MadAgents releases are kept in [`legacy/`](legacy). See
+[`legacy/README.md`](legacy/README.md).
 
 ---
 
