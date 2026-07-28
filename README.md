@@ -90,8 +90,9 @@ land in `<instance>/output/`. See [Build image](#build-image) for the other imag
 No Apptainer, no image, no `config.env`. Uses the MadGraph you already have.
 
 ```bash
-./install/madinstall.sh                                        # guided: asks where, and which memory
-python3 install/installer.py ~/my-study --memory pretrained    # or straight to it
+cd install && claude                                           # guided: it asks where, and which memory
+
+python3 install/installer.py ~/my-study --memory pretrained    # or skip the conversation (from the repo root)
 
 cd ~/my-study && ./madagents.sh
 ```

@@ -4,9 +4,18 @@
 MadGraph. This folder is the other case: putting the agent system **into a folder
 on your own machine**, to run against a MadGraph you already have — or none at all.
 
+Start a Claude Code session in this folder and it installs for you — it asks where,
+and which memory pack:
+
 ```bash
-./install/madinstall.sh                              # guided: it asks where and which memory
-python3 install/installer.py ~/my-study --memory pretrained   # or straight to it
+cd install && claude
+```
+
+There is no wrapper script; the session picks the installer up from `install/.claude/`.
+To skip the conversation entirely, call the installer directly from the repo root:
+
+```bash
+python3 install/installer.py ~/my-study --memory pretrained
 ```
 
 Then:

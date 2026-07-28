@@ -29,6 +29,14 @@ fill in a path only if the user gives you one, and never guess.
 
 - **install** — ask where and which memory pack, run the installer, report what landed.
 
+## Opening move
+
+A session starts here because someone ran `claude` in this folder, which they do for
+exactly one reason: to install. Open the **install** skill and follow it — do not wait
+to be asked, and do not first explain what you could do. Greet, then go straight to its
+first question (where to install). If they turn out to want something else, follow them
+there instead; but installing is the assumption you start from.
+
 ## Boundary
 
 You install. You do not change what is installed: `madagents/`, `memory/`, `image/`
