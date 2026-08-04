@@ -22,6 +22,12 @@ API_KEY_VARS: tuple[str, ...] = (
     "AWS_BEARER_TOKEN_BEDROCK",
     "GOOGLE_APPLICATION_CREDENTIALS",
     "ANTHROPIC_VERTEX_PROJECT_ID",
+    # The same three classes again for Codex. A codex run authenticates the way
+    # a claude run does — through the config directory the launcher binds — so
+    # an ambient key or redirected endpoint is no more welcome here than there.
+    "CODEX_API_KEY",
+    "CODEX_ACCESS_TOKEN",
+    "OPENAI_BASE_URL",
 )
 
 API_KEY_SUFFIXES: tuple[str, ...] = ("_API_KEY", "_AUTH_TOKEN")

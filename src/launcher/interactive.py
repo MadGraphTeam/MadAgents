@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -23,13 +24,21 @@ from .errors import die
 from .paths import REPO_ROOT
 from .setup import (
     DEFAULT_MEMORY,
+    DEFAULT_PROVIDER,
+    HOSTED_BACKEND,
+    LOCAL_BACKEND,
     MEMORY_DIR,
     NO_MEMORY,
     NO_MEMORY_NAME,
+    PROVIDERS_BY_BACKEND,
+    SYSTEM_BY_PROVIDER,
     _available_memory_packs,
     build_instance,
+    default_provider,
     instance_label,
     memory_options,
+    provider_options,
+    read_backend,
     sanitize_name,
 )
 
@@ -94,6 +103,26 @@ class Instance:
         return "cold"
 
     @property
+    def provider(self) -> str:
+        """Which CLI this run was built for — it cannot be changed afterwards.
+
+        Read with a regex rather than the preset loader: the listing builds one
+        of these per instance, and a full parse (plus its validation, which
+        touches the filesystem) is far more than a one-line answer needs.
+        """
+        try:
+            text = (self.path / "config.yaml").read_text()
+        except OSError:
+            return "?"
+        m = re.search(r"^provider:\s*(\S+)", text, re.M)
+        return m.group(1) if m else DEFAULT_PROVIDER
+
+    @property
+    def backend(self) -> str:
+        """How this run starts — ``hosted`` or ``local``. Fixed at build time."""
+        return read_backend(self.path)
+
+    @property
     def wiki_pages(self) -> int:
         wiki = self.path / "output" / ".madagents" / "wiki"
         return len(list(wiki.rglob("*.md"))) if wiki.is_dir() else 0
@@ -106,8 +135,9 @@ class Instance:
 
     def describe(self) -> str:
         flag = "   [RUNNING]" if self.running else ""
-        return (f"{self.label:<22} {self.memory:<17} "
-                f"{self.wiki_pages:>4} wiki pages   {_age(self.touched):<10}{flag}")
+        return (f"{self.label:<22} {self.provider:<12} {self.backend:<8} "
+                f"{self.memory:<17} {self.wiki_pages:>4} wiki pages   "
+                f"{_age(self.touched):<10}{flag}")
 
 
 def _list_instances() -> list[Instance]:
@@ -166,6 +196,47 @@ def _choose_memory_pack() -> str | None:
         print("  ? pick one of the listed numbers.")
 
 
+def _choose_provider(backend: str = HOSTED_BACKEND) -> str:
+    """Menu for which CLI to run on. Returns a provider name.
+
+    Asked before the memory question because it is the more consequential
+    choice: a run's provider is fixed at build time and there is no conversion
+    between the two learned tiers, whereas the memory pack is just a starting
+    point. Skipped silently when only one provider is actually installed —
+    a question with one answer is noise, which is why the local backend (one
+    provider today) shows no menu at all.
+    """
+    options = [(n, d, ok) for n, d, ok in provider_options(backend)]
+    usable = [n for n, _, ok in options if ok]
+    if len(usable) <= 1:
+        return usable[0] if usable else default_provider(backend)
+
+    print("\nRun on which CLI:\n")
+    default = default_provider(backend)
+    for n, (name, description, ok) in enumerate(options, 1):
+        mark = "  (default)" if name == default else ""
+        if ok:
+            print(f"  {n}) {name:<13} {description}{mark}")
+        else:
+            print(f"  -) {name:<13} not available — run tools/render_codex.py to generate it")
+    print()
+    names = [name for name, _, ok in options if ok]
+    while True:
+        raw = _ask(f"Select [1-{len(options)}, default 1]: ", "1")
+        chosen = None
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            candidate = options[int(raw) - 1]
+            if not candidate[2]:
+                print(f"  ! {candidate[0]} is not generated in this checkout yet.")
+                continue
+            chosen = candidate[0]
+        elif raw in names:
+            chosen = raw
+        if chosen is not None:
+            return chosen
+        print("  ? pick one of the listed numbers.")
+
+
 def _ask_name(default: str) -> str:
     """Name the run. It becomes the instance dir, so you can find it again."""
     print()
@@ -177,7 +248,8 @@ def _menu(instances: list[Instance]) -> tuple[str, Instance | None]:
     """Top-level menu. Returns (action, instance) with action in
     {"resume", "new", "fork"}."""
     print("\nMadAgents runs:\n")
-    print(f"     {'NAME':<22} {'MEMORY':<17} {'WIKI':>4}              LAST USED")
+    print(f"     {'NAME':<22} {'CLI':<12} {'BACKEND':<8} {'MEMORY':<17} "
+          f"{'WIKI':>4}              LAST USED")
     for n, inst in enumerate(instances, 1):
         print(f"  {n}) {inst.describe()}")
     if instances:
@@ -226,12 +298,28 @@ def _launch(instance: Path, claude_args: list[str]) -> None:
     os.execv(str(run_sh), [str(run_sh), *claude_args])
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    backend: str = HOSTED_BACKEND,
+    banner: str | None = None,
+) -> int:
+    """The menu, shared by ``./madrun.sh`` and ``./local/madrun.sh``.
+
+    *backend* decides what a **new** run is built as; existing runs keep
+    whatever they were built as, which is why the listing shows the column and
+    why resuming one is unaffected by which entry point you came in through.
+
+    *banner* is a line printed above the menu — the local launcher uses it to
+    show which endpoint the session will talk to. It is passed in rather than
+    computed here so this module keeps knowing nothing about ``local/``.
+    """
     argv = argv if argv is not None else sys.argv[1:]
+    prog = "madrun.sh" if backend == HOSTED_BACKEND else "local/madrun.sh"
     parser = argparse.ArgumentParser(
-        prog="madrun.sh",
+        prog=prog,
         description="Pick a MadAgents run and start it. Unrecognised arguments "
-                    "are forwarded to claude (e.g. --resume, --model).",
+                    "are forwarded to the CLI (e.g. --resume, --model).",
         add_help=True,
     )
     parser.add_argument("--new", action="store_true",
@@ -247,6 +335,12 @@ def main(argv: list[str] | None = None) -> int:
                              f"Default: {DEFAULT_MEMORY!r}. "
                              f"See --list-memory for what each one carries.")
     parser.add_argument("--name", metavar="NAME", help="Label for the new instance.")
+    parser.add_argument("--provider", metavar="CLI", default=None,
+                        choices=sorted(PROVIDERS_BY_BACKEND[backend]),
+                        help=f"Which CLI to run the agent system on: "
+                             f"{', '.join(sorted(PROVIDERS_BY_BACKEND[backend]))} "
+                             f"(default: {default_provider(backend)}). A fork keeps the "
+                             f"provider it was forked from.")
     parser.add_argument("--list", action="store_true",
                         help="List existing runs and exit.")
     parser.add_argument("--list-memory", action="store_true",
@@ -265,6 +359,9 @@ def main(argv: list[str] | None = None) -> int:
 
     instances = _list_instances()
 
+    if banner and not args.list:
+        print(banner, flush=True)
+
     if args.list:
         if not instances:
             print("No runs yet. `./madrun.sh --new` creates one.")
@@ -280,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
     source: Path | None = None
     memory: str | None = args.memory
     name: str | None = args.name
+    provider: str | None = args.provider
     interactive = sys.stdin.isatty() and not (args.new or args.fork or args.memory)
 
     fork_of: Instance | None = None
@@ -296,18 +394,29 @@ def main(argv: list[str] | None = None) -> int:
             elif action == "fork":
                 fork_of = chosen
                 source = chosen.path
-        # New or fork: choose the starting memory (a fork inherits its source's,
-        # so skip the question there), then name it.
+        # New or fork: choose the CLI and the starting memory (a fork inherits
+        # both from its source, so skip the questions there), then name it.
         if source is None:
+            if provider is None:
+                provider = _choose_provider(backend)
             memory = _choose_memory_pack() or "none"
         if name is None:
-            name = _ask_name(f"{fork_of.label}-fork" if fork_of else "madagents")
+            suffix = "-local" if backend == LOCAL_BACKEND else ""
+            default_name = (
+                f"{fork_of.label}-fork" if fork_of
+                else ("madagents-codex" if provider == "codex" else "madagents") + suffix
+            )
+            name = _ask_name(default_name)
 
     instance = build_instance(
-        source=str(source) if source else "madagents",
+        source=str(source) if source else None,
         dest=None,
         name=name,
         memory=memory,
+        provider=provider,
+        # Only for a NEW run: a fork inherits its source's backend, and passing
+        # this one would silently convert it to however we were invoked.
+        backend=None if source else backend,
     )
     if args.setup_only:
         print(instance)

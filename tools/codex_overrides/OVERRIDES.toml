@@ -1,0 +1,56 @@
+# Codex overrides — files whose *mechanism* differs, not just their paths.
+#
+# tools/render_codex.py path-substitutes everything else. These nine could not be
+# substituted: a rewritten path would have left a sentence that parses and lies.
+#
+# Each entry pins the SHA-256 of the canonical file the override was written
+# against. Edit the canonical file and the render FAILS until someone revisits
+# the override. That is the point — an override is a fork, and a silently stale
+# fork is how the two providers drift apart.
+#
+# After folding a canonical change into an override, refresh its hash:
+#   python3 tools/refresh_override_hashes.py
+
+
+# the slate is a marked region of the role file, written through a script — not a path
+[override.".claude/skills/ma-wiki-write/SKILL.md"]
+sha256 = "aa0280410d38d4cade2fe8431187197451820d7d3136d4dcca2939e20aa7d113"
+
+# step 7's placement audit checks the script's output, not a slate file path
+[override.".claude/skills/ma-reflect/SKILL.md"]
+sha256 = "bc0d528c78f3ecdfeb00622caca2b72f77224297ba91c9c8806ca2ad4187189a"
+
+# same placement audit, at the end of a study pass
+[override.".claude/skills/mg-study/SKILL.md"]
+sha256 = "715b7f77901ee63963ec3c206e548b635375b37bdd386b32a8e8f415332a9e50"
+
+# the harness is three trees; a card edit is a TOML edit and must not touch the slate region
+[override.".claude/skills/ma-doctor/SKILL.md"]
+sha256 = "7da70163208f9965ced6a66701cde0354420647a637f5e03f2a9d68884062432"
+
+# harness layout, learned-tier locations, and where Codex keeps session history
+[override.".claude/skills/ma-doctor/analyst.md"]
+sha256 = "543b5f010f56cdd6e1b842b24483495f231f1c0b7d73e113c1b98b24a9cfedfd"
+
+# wholesale: the runtime's loading model is the subject of the file
+[override.".claude/skills/ma-doctor/cc-mechanics.md"]
+sha256 = "c372ed6c116471b6cc6800960c462089d8692db7889618dc06c237c6f47c3f9a"
+renames_to = ".claude/skills/ma-doctor/codex-mechanics.md"
+
+# what it reviews, plus the two silent Codex failure classes
+[override.".claude/skills/ma-doctor/reviewers/edit-critic.md"]
+sha256 = "b61b28fb78c94469e8f41355f9f1cc558accde74ba5b255bfbe1b7938d27d95c"
+
+# the loading model it applies, and the portability grep's roots
+[override.".claude/skills/ma-doctor/reviewers/surface-discipline.md"]
+sha256 = "c297ea831e0f39d7b19df16e3efd099281ccb84834da447da61a108c83f8da34"
+
+# the runtime it checks against, and that prompt-input settles most claims offline
+[override.".claude/skills/ma-doctor/reviewers/cc-alignment.md"]
+sha256 = "bf0cf6edb92de1888395d474bdd153f9850b0e81a3270a62a0f2ad127b991b99"
+renames_to = ".claude/skills/ma-doctor/reviewers/codex-alignment.md"
+
+# the "in a harness like this" paragraph names surfaces this provider has not
+# (the rest of lessons/ is an exempt citation corpus — see render_codex.py)
+[override.".claude/skills/ma-doctor/lessons/18-map-not-manual.md"]
+sha256 = "8b3b84ec51b82325a31d79467083447df8d2b0ffd5e0fab11343fb83b77aca44"

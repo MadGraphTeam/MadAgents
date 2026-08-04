@@ -36,6 +36,35 @@ legacy/madagents_v2/claude_code/archive
 # survives a global ignore of that filename (~/.config/git/ignore); the root
 # .claude/ is unaffected, since git will not descend into an excluded directory.
 !**/.claude/settings.local.json
+# --- opencode -----------------------------------------------------------------
+# opencode is NOT vendored here: the user installs it (a single binary from the
+# upstream release), or the container does. Nothing below is ever committed.
+#
+# Only the REPO-ROOT .opencode/ is local session state — a generated system tree
+# under madagents_opencode/.opencode/ IS the deliverable, so this is anchored
+# with a leading slash for exactly the reason /.claude/ above is.
+/.opencode/
+# An install prefix, if anyone ever points one inside the checkout. The binary
+# is ~171 MB and belongs on the machine, not in git.
+opencode_bin/
+**/opencode_bin/
+# opencode's own XDG roots, should one ever be pointed into the repo: the data
+# root holds auth.json and session history, the cache root holds the models.dev
+# catalogue and downloaded helper binaries.
+opencode_config/
+**/opencode_config/
+opencode_cache/
+**/opencode_cache/
+# opencode credentials at any depth — the data root's auth.json is a real
+# credential file, like .credentials.json above.
+**/auth.json
+# The per-launch bearer-token file the local launcher writes for a self-hosted
+# endpoint (referenced from opencode.json as {file:...}, never inlined). It is
+# written into the run workdir under the already-ignored run_dir/; this rule is
+# belt-and-braces in case that ever moves.
+opencode-token
+**/opencode-token
+
 .nfs*
 archive/
 .apptainer_tmp

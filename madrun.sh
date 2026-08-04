@@ -24,7 +24,8 @@
 #   ./madrun.sh --new --setup-only          build it, do not start a session
 #
 # Memory packs (see memory/README.md): pretrained (default, Anthropic models),
-# pretrained-local (+ Claude Code know-how, self-hosted models), bare-local, none.
+# pretrained-local-cc / -opencode (+ that CLI's harness know-how, self-hosted
+# models), bare-local-cc / -opencode, none.
 # A pack is COPIED into the run, so the session extends its own copy and
 # memory/<pack>/ in this repo stays fixed.
 #

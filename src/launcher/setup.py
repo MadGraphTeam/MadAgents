@@ -52,6 +52,91 @@ from .paths import REPO_ROOT, SRC_ROOT
 from .workdir import make_stamp
 
 DEFAULT_SYSTEM = REPO_ROOT / "madagents"
+#: The same agent system rendered for the Codex CLI (tools/render_codex.py).
+CODEX_SYSTEM = REPO_ROOT / "madagents_codex"
+#: And for opencode (tools/render_opencode.py).
+OPENCODE_SYSTEM = REPO_ROOT / "madagents_opencode"
+#: ``--provider`` values and the shipped system each one starts from.
+SYSTEM_BY_PROVIDER = {
+    "claude_code": DEFAULT_SYSTEM,
+    "codex": CODEX_SYSTEM,
+    "opencode": OPENCODE_SYSTEM,
+}
+DEFAULT_PROVIDER = "claude_code"
+
+#: One line per provider, for the menu and ``--help``. Kept beside the mapping
+#: above so adding a provider means touching one place.
+PROVIDER_DESCRIPTIONS = {
+    "claude_code": "Claude Code — needs the `claude` CLI, and CLAUDE_CONFIG_DIR in config.env.",
+    "codex": "Codex — needs the `codex` CLI, and CODEX_HOME in config.env.",
+    "opencode": "opencode — needs the `opencode` CLI. Talks to your endpoint through its "
+                "own config file, so no API key ever enters the environment.",
+}
+
+#: How a run instance is *started* — which launcher its ``run.sh`` invokes.
+#: ``hosted`` goes through ``launcher`` and authenticates the way the vendor CLI
+#: does, through the config dir the launcher binds. ``local`` goes through
+#: ``launcher_local``, which points the session at a self-hosted endpoint
+#: declared in ``local/config.env``. The two differ in nothing else — same
+#: image, same overlay, same instances, same memory packs — which is why one
+#: harness builds both and the instance records which it is.
+HOSTED_BACKEND = "hosted"
+LOCAL_BACKEND = "local"
+#: Recorded in the instance so the menu can show it, and so a fork inherits it.
+#: The *authority* is the generated ``run.sh``; this file is how it is read
+#: back cheaply. Mirrors ``memory-pack.txt``.
+BACKEND_FILE = "backend.txt"
+#: The launcher package each backend's ``run.sh`` calls.
+LAUNCHER_BY_BACKEND = {HOSTED_BACKEND: "launcher", LOCAL_BACKEND: "launcher_local"}
+#: ``local/`` needs to be importable too, for ``python3 -m launcher_local``.
+LOCAL_ROOT = REPO_ROOT / "local"
+
+#: Which providers a backend can actually start. The hosted path runs the vendor
+#: CLIs against their own APIs; the local path runs whatever can be aimed at a
+#: self-hosted endpoint. Codex is absent from ``local`` because it has no
+#: endpoint-redirection story the launcher supports.
+PROVIDERS_BY_BACKEND = {
+    HOSTED_BACKEND: ("claude_code", "codex"),
+    LOCAL_BACKEND: ("opencode", "claude_code"),
+}
+
+#: What a *new* run on each backend starts from. opencode leads on the local
+#: backend because it is the only CLI that reaches a self-hosted endpoint
+#: through a config file rather than an environment variable — so nothing
+#: credential-shaped has to be injected, and the auth scrub stays absolute.
+#: Claude Code remains available there, unchanged, for endpoints already
+#: speaking the Anthropic API.
+DEFAULT_PROVIDER_BY_BACKEND = {
+    HOSTED_BACKEND: DEFAULT_PROVIDER,
+    LOCAL_BACKEND: "opencode",
+}
+
+
+def provider_options(backend: str = HOSTED_BACKEND) -> list[tuple[str, str, bool]]:
+    """Every provider as ``(name, description, available)``, default first.
+
+    *available* is whether that provider's system tree is actually present.
+    The Codex tree is generated (``tools/render_codex.py``), so a checkout that
+    has not rendered it should say so in the menu rather than offer a choice
+    that fails at build time.
+
+    *backend* narrows the list to what that start path can run, so the menu
+    never offers a combination the launcher would refuse.
+    """
+    allowed = PROVIDERS_BY_BACKEND.get(backend, tuple(SYSTEM_BY_PROVIDER))
+    default = default_provider(backend)
+    names = [default] + [p for p in sorted(allowed) if p != default]
+    return [
+        (p, PROVIDER_DESCRIPTIONS.get(p, ""), (SYSTEM_BY_PROVIDER[p] / "config.yaml").is_file())
+        for p in names
+    ]
+
+
+def default_provider(backend: str = HOSTED_BACKEND) -> str:
+    """The provider a new run on *backend* starts from unless told otherwise."""
+    allowed = PROVIDERS_BY_BACKEND.get(backend, tuple(SYSTEM_BY_PROVIDER))
+    preferred = DEFAULT_PROVIDER_BY_BACKEND.get(backend, DEFAULT_PROVIDER)
+    return preferred if preferred in allowed else allowed[0]
 
 #: Shipped memory packs — the learned tier the system starts from. See memory/README.md.
 MEMORY_DIR = REPO_ROOT / "memory"
@@ -77,6 +162,21 @@ _MEMORY_TIERS = (
     (".claude/agent-memory", ".claude/agent-memory"),
     (".madagents/wiki", "output/.madagents/wiki"),
 )
+
+#: The same, for a Codex instance. The packs stay in their Claude Code shape —
+#: one pack serves both providers — so this is the translation, and it is only
+#: two thirds of the job: the consultant slates have no directory to land in,
+#: because on Codex each one lives inside its own role file. They are spliced
+#: separately by ``_seed_codex_slates``.
+_CODEX_MEMORY_TIERS = (
+    (".claude/lead-memory", "output/.madagents/memory/lead"),
+    (".madagents/wiki", "output/.madagents/wiki"),
+)
+
+#: Where the lead's slate ends up in a Codex instance, relative to the instance
+#: root. Must agree with ``launcher.code.LEAD_SLATE_REL`` resolved against
+#: ``/output`` — that is the file the launcher appends to the lead's prompt.
+CODEX_LEAD_SLATE = "output/.madagents/memory/lead/MEMORY.md"
 
 #: Where the lead's slate lives *inside the container*. The instance's
 #: ``.claude/`` is bind-mounted at ``/output/.claude`` and the session runs with
@@ -347,21 +447,30 @@ def _prepare_output_root(instance: Path) -> None:
     """
     output_dir = instance / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / ".claude").mkdir(exist_ok=True)
+    # Mountpoints for the agent-system binds. Both providers' are created: the
+    # cost is an empty directory, and a wrong guess is a bind that fails at
+    # start-up. Which ones actually get bound is Preset.agent_dirs()' call.
+    for mountpoint in (".claude", ".codex", ".agents", ".opencode", "prompts"):
+        (output_dir / mountpoint).mkdir(exist_ok=True)
     # The wiki's two halves, present even on a cold start so the layout is the
     # same whether or not a memory pack was seeded.
     for sub in ("consultants", "lead"):
         (output_dir / ".madagents" / "wiki" / sub).mkdir(parents=True, exist_ok=True)
+    # The lead's slate directory (Codex reads its slate from here; harmless
+    # otherwise), so the lead never has to create the directory it writes into.
+    (output_dir / ".madagents" / "memory" / "lead").mkdir(parents=True, exist_ok=True)
     if not (output_dir / ".git").exists():
         subprocess.run(["git", "init", "-q", str(output_dir)], check=True)
 
 
-def _seed_environment(instance: Path) -> None:
+def _seed_environment(instance: Path, preset=None) -> None:
     """Seed the run's environment description at ``output/CLAUDE.md``.
 
     The session starts with ``output/`` as both its CWD and its project root, so
     a ``CLAUDE.md`` there is picked up by Claude Code on its own — no preset
-    change, nothing to wire. The text comes from the *image* the run will use
+    change, nothing to wire. Codex reads the same kind of file under a different
+    name (``AGENTS.md``), from the same place, so only the filename changes.
+    The text comes from the *image* the run will use
     (``images.seed_text``): what is installed, and where, is a property of the
     build, and nothing else in the run knows it.
 
@@ -372,7 +481,13 @@ def _seed_environment(instance: Path) -> None:
     new run, so it seeds fresh rather than inheriting a description of software
     its own fresh overlay may not have.
     """
-    target = instance / "output" / "CLAUDE.md"
+    # Codex and opencode both read AGENTS.md. opencode falls back to CLAUDE.md
+    # when there is no AGENTS.md, but only one of them wins — seeding the name
+    # it prefers keeps the rendered tree's own references (which say AGENTS.md)
+    # honest.
+    agents_md = preset is not None and (preset.is_codex or preset.is_opencode)
+    filename = "AGENTS.md" if agents_md else "CLAUDE.md"
+    target = instance / "output" / filename
     if target.exists():
         return
     if (REPO_ROOT / "config.env").is_file():
@@ -390,7 +505,80 @@ def _seed_environment(instance: Path) -> None:
     print(f"madrun setup: environment seeded from {seed}", flush=True)
 
 
-def _seed_memory(pack: Path, instance: Path) -> None:
+def _seed_codex_slates(pack: Path, instance: Path) -> None:
+    """Splice a pack's consultant slates into the instance's role files.
+
+    On Claude Code a slate is a file the harness copies into place. On Codex it
+    is a region inside ``.codex/agents/<name>.toml``, because that file's
+    ``developer_instructions`` is what gets auto-loaded into every dispatch of
+    that role — so seeding is an edit, not a copy.
+
+    Every role is written, including the ones the pack has nothing for: those
+    get the cold skeleton back. That is what makes ``--memory`` on a fork mean
+    what it says — the pack replaces the learned tier, rather than leaving the
+    fork's own slates showing through wherever the pack happens to be thin.
+    """
+    from . import codex_memory
+
+    agents_dir = instance / ".codex" / "agents"
+    pack_slates = pack / ".claude" / "agent-memory"
+    for role in sorted(agents_dir.glob("*.toml")):
+        try:
+            current = codex_memory.read_slate(role)
+        except codex_memory.SlateError:
+            continue  # a reviewer/auditor role: no slate region by design
+        seeded = pack_slates / role.stem / "MEMORY.md"
+        text = seeded.read_text(encoding="utf-8") if seeded.is_file() else ""
+        # A pack entry that exists but is empty is still "cold for this role" —
+        # give it the section skeleton rather than a blank region, so a
+        # consultant always has the shape it is expected to write back into.
+        if not codex_memory.has_content(text):
+            text = codex_memory.COLD_SLATE
+        if text.strip() != current.strip():
+            codex_memory.write_slate(role, text)
+
+
+def _opencode_slate_names(instance: Path) -> list[str]:
+    """Agents whose opencode prompt references a slate file.
+
+    Read out of the generated config rather than guessed from the roster: the
+    five reviewer/auditor cards carry no learned tier and name no slate, and
+    inventing files for them would put four empty headings in a context that
+    deliberately has none.
+    """
+    config = instance / ".opencode" / "opencode.json"
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [
+        name for name, spec in data.get("agent", {}).items()
+        if "agent-memory/" in (spec.get("prompt") or "")
+    ]
+
+
+def _backfill_opencode_slates(instance: Path) -> int:
+    """Create the cold skeleton for any referenced slate the pack did not supply.
+
+    Returns how many were written. See the call site for why this is not
+    optional: on opencode a ``{file:}`` reference to a missing file invalidates
+    the entire config, so "this agent has learned nothing yet" has to be spelled
+    as an empty file rather than as an absent one.
+    """
+    from .codex_memory import COLD_SLATE  # the shared slate shape; provider-neutral
+
+    written = 0
+    for name in _opencode_slate_names(instance):
+        slate = instance / ".claude" / "agent-memory" / name / "MEMORY.md"
+        if slate.is_file():
+            continue
+        slate.parent.mkdir(parents=True, exist_ok=True)
+        slate.write_text(COLD_SLATE, encoding="utf-8")
+        written += 1
+    return written
+
+
+def _seed_memory(pack: Path, instance: Path, preset=None) -> None:
     """Copy a shipped memory pack's learned tier into the instance.
 
     The pack itself is never touched again after this: the instance holds a full
@@ -402,10 +590,11 @@ def _seed_memory(pack: Path, instance: Path) -> None:
     means an empty tier, not an inherited one**. Both halves matter when seeding
     over an instance that already had memory (``--memory`` on a fork): keeping
     what the pack omits would produce a learned tier that never existed as a
-    whole — e.g. ``bare-local``'s empty lead slate sitting on top of 46
+    whole — e.g. ``bare-local-*``'s empty lead slate sitting on top of 46
     inherited consultant slates pointing at an inherited wiki.
     """
-    for src_rel, dst_rel in _MEMORY_TIERS:
+    codex = preset is not None and preset.is_codex
+    for src_rel, dst_rel in (_CODEX_MEMORY_TIERS if codex else _MEMORY_TIERS):
         src = pack / src_rel
         dst = instance / dst_rel
         if dst.exists():
@@ -415,6 +604,19 @@ def _seed_memory(pack: Path, instance: Path) -> None:
             _copy_preset_tree(src, dst)
         else:
             dst.mkdir()
+    if codex:
+        _seed_codex_slates(pack, instance)
+    if preset is not None and preset.is_opencode:
+        # opencode uses _MEMORY_TIERS unchanged — the packs are already in the
+        # shape it wants, which is the point of mirroring Claude Code. But the
+        # replace-don't-merge rule above has teeth here that it does not have
+        # elsewhere: a pack that carries no consultant slates (``bare-local-*``
+        # carries only a lead slate) leaves .claude/agent-memory EMPTY, and on
+        # opencode every slate a prompt names must exist or the whole config is
+        # rejected — "bad file reference" — and the run comes up with zero
+        # consultants. Put the cold skeletons back for whatever the pack did
+        # not supply.
+        _backfill_opencode_slates(instance)
     (instance / "memory-pack.txt").write_text(
         f"{pack.name}\n"
         f"# Seeded from {pack} by `madrun setup`.\n"
@@ -468,7 +670,18 @@ def _apply_memory_settings(preset, instance: Path) -> None:
 
     The directory key is dropped when auto-memory is off — the flag alone then
     carries the decision, with nothing pointing at a tier no one will read.
+
+    Claude-Code-only. Codex has no equivalent switch, and needs none: a
+    consultant's slate is inside the role file Codex already loads for every
+    dispatch, and the lead's is appended to its prompt by the launcher. The
+    tier is loaded because of where it lives, not because a setting says so.
     """
+    # Neither of the other two providers has an auto-memory setting to pin.
+    # Codex loads a slate through the role file; opencode through {file:}
+    # interpolation in opencode.json. In both cases the tier is wired by the
+    # rendered tree, not by a harness flag, so there is nothing to write here.
+    if preset.is_codex or preset.is_opencode:
+        return
     settings_path = instance / ".claude" / "settings.local.json"
     try:
         data = json.loads(settings_path.read_text())
@@ -485,18 +698,51 @@ def _apply_memory_settings(preset, instance: Path) -> None:
     settings_path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def _describe_memory(instance: Path) -> str:
-    """Count what the instance's learned tier actually holds, for the setup log."""
-    slates = instance / ".claude" / "agent-memory"
-    lead = instance / ".claude" / "lead-memory"
+def _describe_memory(instance: Path, preset=None) -> str:
+    """Count what the instance's learned tier actually holds, for the setup log.
+
+    Counts what is *populated*, not what exists — on Codex every role file has a
+    slate region whether or not anything was seeded into it, so counting files
+    would report a full tier for a cold start.
+    """
     wiki = instance / "output" / ".madagents" / "wiki"
-    n_slates = len([d for d in slates.iterdir() if d.is_dir()]) if slates.is_dir() else 0
-    n_lead = len(list(lead.glob("*.md"))) if lead.is_dir() else 0
     n_wiki = len(list(wiki.rglob("*.md"))) if wiki.is_dir() else 0
+    if preset is not None and preset.is_codex:
+        from . import codex_memory
+
+        n_slates = codex_memory.count_seeded(instance / ".codex" / "agents")
+        lead = instance / "output" / ".madagents" / "memory" / "lead"
+    elif preset is not None and preset.is_opencode:
+        # Same trap as Codex, different shape: every referenced slate exists as
+        # a file (it has to — see _backfill_opencode_slates), so counting
+        # directories would report a full tier for a cold start. Count the ones
+        # holding something past the empty headings.
+        from . import codex_memory
+
+        n_slates = sum(
+            1 for name in _opencode_slate_names(instance)
+            if codex_memory.has_content(
+                (instance / ".claude" / "agent-memory" / name / "MEMORY.md")
+                .read_text(encoding="utf-8", errors="replace")
+                if (instance / ".claude" / "agent-memory" / name / "MEMORY.md").is_file()
+                else ""
+            )
+        )
+        lead = instance / ".claude" / "lead-memory"
+    else:
+        slates = instance / ".claude" / "agent-memory"
+        n_slates = len([d for d in slates.iterdir() if d.is_dir()]) if slates.is_dir() else 0
+        lead = instance / ".claude" / "lead-memory"
+    n_lead = len(list(lead.glob("*.md"))) if lead.is_dir() else 0
     return f"{n_slates} slates, {n_lead} lead files, {n_wiki} wiki pages"
 
 
-def _write_run_sh(instance: Path, instance_name: str) -> Path:
+def _write_run_sh(
+    instance: Path,
+    instance_name: str,
+    backend: str = HOSTED_BACKEND,
+    model: str | None = None,
+) -> Path:
     """Write the instance's launcher invocation.
 
     ``APPTAINER_OVERLAY`` is pinned to this instance's own overlay
@@ -506,26 +752,60 @@ def _write_run_sh(instance: Path, instance_name: str) -> Path:
     two apptainer instances cannot safely share one ext3 overlay. Pinning it
     turns that silent corruption into a clear "Overlay image not found" at
     startup.
+
+    *backend* selects the launcher package this instance starts through, and
+    this file is the authority on that: a local instance must not come up
+    through the hosted launcher (it would run against the vendor API instead of
+    the configured endpoint), and the only way to guarantee that is for the
+    instance's own entry point to name the right module.
+
+    *model* pins ``LOCAL_MODEL_NAME`` for a local instance whose model was
+    chosen when it was built. It is set *before* the exec rather than baked
+    into the config file, so the documented precedence still holds: a caller
+    that exports the variable, or passes ``--model``, still wins.
     """
+    module = LAUNCHER_BY_BACKEND[backend]
+    pythonpath = str(SRC_ROOT) if backend == HOSTED_BACKEND else f"{SRC_ROOT}:{LOCAL_ROOT}"
+    endpoint_note = (
+        "" if backend == HOSTED_BACKEND
+        else "# This is a LOCAL run: the session talks to the endpoint declared in\n"
+             "# local/config.env, not to a vendor API. See local/README.md.\n"
+    )
+    model_line = f'         LOCAL_MODEL_NAME="{model}" \\\n' if model else ""
     run_sh = instance / "run.sh"
     run_sh.write_text(
         "#!/usr/bin/env bash\n"
         "# Generated by `python3 -m launcher setup`. Starts this run instance.\n"
-        "# Re-run freely (--resume / --continue forward to claude). Edits to .claude/ —\n"
+        "# Re-run freely (--resume / --continue forward to the CLI). Edits to .claude/ —\n"
         "# including memory the agent writes during a run — stay in this folder, so\n"
         "# re-running picks up where the last run left off.\n"
+        f"{endpoint_note}"
         "set -euo pipefail\n"
         'INSTANCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n'
-                'exec env MADRUN_SYSTEM_DIR="$INSTANCE" \\\n'
+        'exec env MADRUN_SYSTEM_DIR="$INSTANCE" \\\n'
         f'         MADRUN_INSTANCE="{instance_name}" \\\n'
         '         RUN_DIR="$INSTANCE/run" \\\n'
         '         OUTPUT_DIR="$INSTANCE/output" \\\n'
         '         APPTAINER_OVERLAY="$INSTANCE/overlay.img" \\\n'
-        f'         PYTHONPATH="{SRC_ROOT}${{PYTHONPATH:+:$PYTHONPATH}}" \\\n'
-        '         python3 -m launcher code "$@"\n'
+        f"{model_line}"
+        f'         PYTHONPATH="{pythonpath}${{PYTHONPATH:+:$PYTHONPATH}}" \\\n'
+        f'         python3 -m {module} code "$@"\n'
     )
     run_sh.chmod(0o755)
     return run_sh
+
+
+def read_backend(instance: Path) -> str:
+    """Which start path this instance was built for. Defaults to hosted.
+
+    Instances built before ``backend.txt`` existed have none, and they are
+    hosted runs — which is also what the absence means for anything hand-built.
+    """
+    try:
+        value = (instance / BACKEND_FILE).read_text().splitlines()[0].strip()
+    except (OSError, IndexError):
+        return HOSTED_BACKEND
+    return value or HOSTED_BACKEND
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -536,10 +816,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "source",
         nargs="?",
-        default="madagents",
-        help="The agent system to materialize: the shipped 'madagents' (default), "
-             "or the path to an existing run instance to fork — which carries its "
-             "accumulated memory into the new instance.",
+        default=None,
+        help="The agent system to materialize: the shipped system for --provider "
+             "(default), or the path to an existing run instance to fork — which "
+             "carries its accumulated memory into the new instance.",
+    )
+    parser.add_argument(
+        "--provider", default=None, choices=sorted(SYSTEM_BY_PROVIDER),
+        help=f"Which CLI to build the run for (default: {DEFAULT_PROVIDER}). Ignored "
+             f"when a source is given explicitly, including a fork — a fork keeps "
+             f"the provider it was forked from.",
     )
     parser.add_argument(
         "--dest", default=None,
@@ -559,12 +845,24 @@ def main(argv: list[str] | None = None) -> int:
              "an instance, inherit its own memory instead. See memory/README.md.",
     )
     parser.add_argument(
+        "--backend", default=None, choices=sorted(LAUNCHER_BY_BACKEND),
+        help=f"How the instance is started (default: {HOSTED_BACKEND}). '{LOCAL_BACKEND}' "
+             f"builds a run that talks to the endpoint in local/config.env instead of a "
+             f"vendor API. A fork inherits its source's backend.",
+    )
+    parser.add_argument(
+        "--model", default=None, metavar="NAME",
+        help="For a local run: pin LOCAL_MODEL_NAME in the generated run.sh. "
+             "Caller env and an explicit --model at launch still win.",
+    )
+    parser.add_argument(
         "--run", action="store_true",
         help="After building the instance, launch it (exec its run.sh).",
     )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     instance = build_instance(
         source=args.source, dest=args.dest, name=args.name, memory=args.memory,
+        provider=args.provider, backend=args.backend, model=args.model,
     )
     run_sh = instance / "run.sh"
     print(f"madrun setup: instance ready at {instance}")
@@ -587,17 +885,48 @@ def instance_label(dir_name: str) -> str:
 
 
 def build_instance(
-    source: str = "madagents",
+    source: str | None = None,
     dest: str | None = None,
     name: str | None = None,
     memory: str | None = None,
+    provider: str | None = None,
+    backend: str | None = None,
+    model: str | None = None,
 ) -> Path:
     """Materialize *source* into a run instance and return its path.
 
     The engine behind both ``madrun setup`` and the interactive front end.
     *memory* is a pack name, ``"none"`` for cold, or ``None`` to use the default
     (a pack for the shipped system; inherit for a fork).
+
+    *provider* picks which shipped system a *new* run starts from —
+    ``claude_code`` (default) or ``codex``. It is ignored when *source* names a
+    system explicitly, including when forking an instance: a fork's provider is
+    whatever it was forked from, and there is no conversion between the two.
+
+    *backend* picks how the instance is *started* — ``hosted`` (the vendor API,
+    via ``launcher``) or ``local`` (a self-hosted endpoint, via
+    ``launcher_local``). A fork inherits its source's backend unless told
+    otherwise. *model* pins ``LOCAL_MODEL_NAME`` for a local instance.
     """
+    if backend is not None and backend not in LAUNCHER_BY_BACKEND:
+        die(f"unknown backend {backend!r}",
+            hint=f"One of: {', '.join(sorted(LAUNCHER_BY_BACKEND))}")
+    if source is None:
+        allowed = PROVIDERS_BY_BACKEND.get(backend or HOSTED_BACKEND, tuple(SYSTEM_BY_PROVIDER))
+        if provider and provider not in SYSTEM_BY_PROVIDER:
+            die(f"unknown provider {provider!r}",
+                hint=f"One of: {', '.join(sorted(SYSTEM_BY_PROVIDER))}")
+        if provider and provider not in allowed:
+            die(f"provider {provider!r} cannot be started on the "
+                f"{backend or HOSTED_BACKEND!r} backend",
+                hint=f"On this backend, one of: {', '.join(allowed)}")
+        system = SYSTEM_BY_PROVIDER[provider or default_provider(backend or HOSTED_BACKEND)]
+        if not (system / "config.yaml").is_file():
+            die(f"no agent system at {system}",
+                hint="Render the Codex tree: python3 tools/render_codex.py"
+                     if provider == "codex" else None)
+        source = str(system)
     preset, default_name = _resolve_source(source)
     forking = _is_instance(preset.preset_dir)
     if name:
@@ -641,30 +970,40 @@ def build_instance(
         _inherit_wiki(preset.preset_dir, instance)
         _record_fork_lineage(preset.preset_dir, instance)
     _materialize_yaml(preset, instance)
-    if memory_pack:
-        _seed_memory(memory_pack, instance)
-    _apply_memory_settings(preset, instance)
-    # After seeding, not before: seeding replaces whole tiers, so this is what
-    # restores the project-root scaffolding (git repo, .claude mountpoint, the
-    # wiki's two halves) that a replaced tier may have taken with it. Idempotent.
+    # The output tree has to exist before seeding on Codex — that is where its
+    # lead slate and wiki land — and re-running it afterwards is what restores
+    # the scaffolding a replaced tier may have taken with it. Idempotent, so it
+    # runs on both sides of the seed.
     _prepare_output_root(instance)
-    _seed_environment(instance)
+    if memory_pack:
+        _seed_memory(memory_pack, instance, preset)
+    _apply_memory_settings(preset, instance)
+    _prepare_output_root(instance)
+    _seed_environment(instance, preset)
     if memory_pack:
         print(f"madrun setup: memory pack {memory_pack.name!r} seeded "
-              f"({_describe_memory(instance)})", flush=True)
+              f"({_describe_memory(instance, preset)})", flush=True)
     elif forking:
         print(f"madrun setup: inherited memory from the source instance "
-              f"({_describe_memory(instance)})", flush=True)
+              f"({_describe_memory(instance, preset)})", flush=True)
     else:
         print("madrun setup: no memory pack — starting cold", flush=True)
-    if not preset.auto_memory_enabled:
+    if not preset.auto_memory_enabled and not preset.is_codex:
         print(
             "madrun setup: WARNING — auto_memory_enabled is false in config.yaml, "
             "so the learned tier will not be loaded or extended by the session.",
             file=sys.stderr, flush=True,
         )
+    # A fork inherits its source's backend (backend.txt rides along in the
+    # system tree), so only an explicit choice overrides it. Written before
+    # run.sh so the two can never disagree about what this instance is.
+    resolved_backend = backend or (read_backend(instance) if forking else HOSTED_BACKEND)
+    (instance / BACKEND_FILE).write_text(f"{resolved_backend}\n")
+    if resolved_backend != HOSTED_BACKEND:
+        print(f"madrun setup: backend {resolved_backend} — this run starts through "
+              f"{LAUNCHER_BY_BACKEND[resolved_backend]}", flush=True)
     _create_overlay(instance)
-    _write_run_sh(instance, instance.name)
+    _write_run_sh(instance, instance.name, backend=resolved_backend, model=model)
     return instance
 
 

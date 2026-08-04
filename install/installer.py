@@ -1,401 +1,470 @@
 #!/usr/bin/env python3
-"""Install the MadAgents agent system into a folder, to run without a container.
+"""Verify a MadAgents install. Read-only — this file writes nothing, ever.
 
-    python3 install/installer.py <target> [--memory PACK] [--no-git]
-    python3 install/installer.py <target> --upgrade
-    python3 install/installer.py --list-memory
+    python3 install/installer.py verify <target> [--allow-modified]
 
-The container path (``./madrun.sh``) and this one install the *same* agent
-system; they differ only in what surrounds it. A run instance gets an image, an
-overlay and a set of bind mounts, and the launcher supplies at start-up what
-Claude Code cannot read from a directory — the lead's system prompt, the model,
-where auto-memory lives. A native install has no launcher, so those have to be
-written into the folder itself:
+**Installing is the agent's job.** It used to be this script's, and that was the
+bug: a script cannot tell a MadAgents install from someone's own project, so it
+guessed — ``.claude/`` exists — and then ``--upgrade`` ``rmtree``d
+``.claude/agents`` and ``.claude/skills``, taking the host project's own agents
+and skills with it. The judgment ("is this a host project? what collides? should
+this folder become a git root?") moved into the install skill, which can look at
+the folder and ask. What is left here is the half a model should not be trusted
+with alone: proving the result is intact.
 
-- the lead's system prompt becomes ``madagents.sh``, a wrapper that appends it;
-- the auto-memory settings become ``.claude/settings.local.json``;
-- the environment description becomes ``CLAUDE.md``, which Claude Code picks up
-  from the project root on its own.
+It checks the failures that are **silent**, because the loud ones report
+themselves:
 
-What the *container* install gets for free and this one cannot is MadGraph: an
-image ships a known stack at a known path, while here MadGraph is wherever the
-user has it, if they have it at all. So the seeded ``CLAUDE.md`` asserts no
-location and asks the session to record what it finds — the same file the
-container seeds, minus the claims only an image can make.
+- a role TOML that does not parse — the consultant is dropped from the roster
+  with no error, and nothing ever says so;
+- a skill whose ``description:`` is not valid YAML — Codex drops the skill
+  silently, so it simply never fires;
+- a slate region that went missing — the learned tier is gone and the session
+  comes up cold without mentioning it;
+- a file that was transcribed instead of copied — subtly wrong, never flagged;
+- **a pre-existing host file that the install overwrote** — the regression that
+  motivated all of this.
 
-Layout produced::
+The last one needs a baseline, so the install skill records one: the manifest's
+``preexisting`` map is a hash of every file in the collision surface *before*
+anything was written. Without it that check is skipped, and says so.
 
-    <target>/
-      .claude/          agents, skills, the learned tier, settings.local.json
-      .madagents/wiki/  the wiki half of the learned tier
-      prompts/          the lead's system prompt, appended by the wrapper
-      config.yaml       the configuration this install was built from
-      CLAUDE.md         environment description — the session's to maintain
-      madagents.sh      start a session here
-      memory-pack.txt   which pack seeded this install
-
-The target is a Claude Code *project root*: the roster's ``memory: project``
-agents resolve their slates against it, which is the same reason the container
-gives a run instance a git-initialised ``output/``.
+The manifest (``<target>/.madagents/install.json``) is what makes any of this
+possible. It is also what replaces the old detection heuristic: a folder is a
+MadAgents install if and only if it has one.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import shutil
-import subprocess
+import os
 import sys
+import tomllib
 from pathlib import Path
+
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from launcher import codex_memory  # noqa: E402
 from launcher.presets_loader import load_preset  # noqa: E402
-from launcher.setup import (  # noqa: E402
-    DEFAULT_MEMORY,
-    DEFAULT_SYSTEM,
-    NO_MEMORY,
-    _copy_preset_tree,
-    _resolve_memory_pack,
-    memory_options,
-)
+from launcher.setup import SYSTEM_BY_PROVIDER  # noqa: E402
 
-#: What a memory pack contributes, as (path in the pack, path in the install).
-#: The container puts the wiki under ``output/`` because that is its project
-#: root; here the project root is the target itself, so the pack's own layout
-#: transfers unchanged.
-_MEMORY_TIERS = (
-    (".claude/lead-memory", ".claude/lead-memory"),
-    (".claude/agent-memory", ".claude/agent-memory"),
-    (".madagents/wiki", ".madagents/wiki"),
-)
-
-#: Replaced by ``--upgrade``; everything else in the target is left alone.
-#: These are the agent system as shipped — the parts a new release changes and
-#: a session never writes to. The learned tier is deliberately not in the list.
-_SYSTEM_PARTS = (".claude/agents", ".claude/skills", "prompts", "config.yaml")
-
-#: Seed for the target's ``CLAUDE.md``, written only when there is none.
-_ENV_TEMPLATE = Path(__file__).resolve().parent / "templates" / "CLAUDE.md"
-
+MANIFEST_REL = ".madagents/install.json"
+MANIFEST_SCHEMA = 1
 WRAPPER_NAME = "madagents.sh"
+TEMPLATES = Path(__file__).resolve().parent / "templates"
+
+#: Where an install can collide with a host project. The skill hashes exactly
+#: these before writing, so ``preexisting`` stays bounded on a large repo
+#: instead of inventorying the whole tree.
+COLLISION_SURFACE = (
+    ".claude", ".codex", ".agents", ".madagents",
+    "prompts", "CLAUDE.md", "AGENTS.md", WRAPPER_NAME,
+    "config.yaml", "memory-pack.txt",
+)
+
+EXPECTED_ROLES = 46
+EXPECTED_SKILLS = 8
 
 
-def _fail(message: str, hint: str | None = None) -> None:
-    print(f"ERROR: {message}", file=sys.stderr)
-    if hint:
-        print(f"  {hint}", file=sys.stderr)
-    raise SystemExit(1)
+class Report:
+    """Collects check results. Any failure makes the whole run exit non-zero."""
+
+    def __init__(self) -> None:
+        self.failed = 0
+        self.warned = 0
+
+    def ok(self, msg: str) -> None:
+        print(f"  ok    {msg}")
+
+    def warn(self, msg: str) -> None:
+        self.warned += 1
+        print(f"  warn  {msg}")
+
+    def fail(self, msg: str) -> None:
+        self.failed += 1
+        print(f"  FAIL  {msg}")
+
+    def skip(self, msg: str) -> None:
+        print(f"  skip  {msg}")
 
 
-def _copy_system(system_dir: Path, target: Path, parts: tuple[str, ...]) -> None:
-    """Copy the shipped agent system into *target*, replacing *parts*."""
-    for rel in parts:
-        src = system_dir / rel
-        if not src.exists():
-            continue
-        dst = target / rel
-        if dst.exists():
-            shutil.rmtree(dst) if dst.is_dir() else dst.unlink()
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        _copy_preset_tree(src, dst)
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _seed_memory(pack: Path | None, target: Path) -> None:
-    """Copy a pack's learned tier in, or lay down the empty layout for a cold start.
+def hash_surface(target: Path) -> dict[str, str]:
+    """Hash every file in the collision surface. Used to build ``preexisting``.
 
-    Every tier is created either way, so the folder looks the same warm or cold
-    and the session never has to create the directory it is about to write to.
-    A tier the pack does not carry is empty, not inherited — the packs are
-    starting points, and a half-inherited tier was never one of them.
+    Exposed so the install skill can produce the baseline with the same
+    definition this file later checks against — one source of truth for what
+    "the collision surface" means.
     """
-    for src_rel, dst_rel in _MEMORY_TIERS:
-        dst = target / dst_rel
-        if dst.exists():
-            shutil.rmtree(dst)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        src = (pack / src_rel) if pack else None
-        if src is not None and src.is_dir():
-            _copy_preset_tree(src, dst)
+    out: dict[str, str] = {}
+    for rel in COLLISION_SURFACE:
+        entry = target / rel
+        if entry.is_file():
+            out[rel] = sha256(entry)
+        elif entry.is_dir():
+            for p in sorted(entry.rglob("*")):
+                if p.is_file():
+                    out[str(p.relative_to(target))] = sha256(p)
+    return out
+
+
+def render_wrapper(template: str, prompt_files: list[str],
+                   disallowed_tools: list[str]) -> str:
+    """Substitute the wrapper template's two arrays.
+
+    The install skill produces the wrapper with exactly this substitution (as a
+    two-expression ``sed``), so verify can regenerate what the wrapper *should*
+    be and compare byte-for-byte. That turns the highest-risk generated file
+    into an exact check rather than a structural guess.
+
+    The rule is uniform: a placeholder line becomes zero or more quoted entries,
+    one per line. Zero entries leaves an empty array literal, which is valid.
+    """
+    def block(items: list[str]) -> list[str]:
+        return [f'  "{i}"' for i in items]
+
+    out: list[str] = []
+    for line in template.splitlines():
+        if line == "@@PROMPT_FILES@@":
+            out.extend(block(prompt_files))
+        elif line == "@@DISALLOWED_TOOLS@@":
+            out.extend(block(disallowed_tools))
         else:
-            dst.mkdir()
-    # The wiki's two halves, present cold so the layout does not depend on the pack.
-    for half in ("consultants", "lead"):
-        (target / ".madagents" / "wiki" / half).mkdir(parents=True, exist_ok=True)
-    (target / "memory-pack.txt").write_text(
-        f"{pack.name if pack else 'none'}\n"
-        f"# Seeded by install/installer.py from "
-        f"{pack if pack else 'no pack — cold start'}.\n"
-        f"# This install owns its copy; the pack is unchanged. See memory/README.md.\n"
-    )
+            out.append(line)
+    return "\n".join(out) + "\n"
 
 
-def _write_settings(preset, target: Path) -> None:
-    """Pin auto-memory on/off and point it at this folder's learned tier.
+def load_manifest(target: Path, rep: Report) -> dict | None:
+    path = target / MANIFEST_REL
+    if not path.is_file():
+        rep.fail(f"no manifest at {MANIFEST_REL} — this folder is not a MadAgents install")
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        rep.fail(f"{MANIFEST_REL} is unreadable: {exc}")
+        return None
+    if data.get("schema") != MANIFEST_SCHEMA:
+        rep.fail(f"{MANIFEST_REL}: schema {data.get('schema')!r}, expected {MANIFEST_SCHEMA}")
+        return None
+    if data.get("provider") not in SYSTEM_BY_PROVIDER:
+        rep.fail(f"{MANIFEST_REL}: unknown provider {data.get('provider')!r}")
+        return None
+    rep.ok(f"manifest: {data['provider']} install, memory pack "
+           f"{data.get('memory_pack', 'unrecorded')!r}")
+    return data
 
-    The same two keys the container pins per instance, for the same two reasons:
-    Claude Code merges ``autoMemoryEnabled`` over the user's own settings, so a
-    user who turned it off globally would otherwise get an install whose 46
-    consultant slates never load; and its default memory directory is under the
-    user's Claude config, shared by every project, so the lead's slate — which
-    has no ``memory: project`` card to place it — would be written outside this
-    folder and lost to the next install.
 
-    ``autoMemoryDirectory`` has to be absolute, which makes the folder
-    non-relocatable. The wrapper re-points it on start rather than letting a
-    moved folder silently lose its memory.
+def check_copies(target: Path, manifest: dict, source: Path, rep: Report,
+                 allow_modified: bool) -> None:
+    """Every byte-copied file is present and identical to what shipped."""
+    paths = manifest.get("paths") or {}
+    if not paths:
+        rep.fail("manifest records no copied paths")
+        return
+    missing, changed = [], []
+    for rel, recorded in sorted(paths.items()):
+        installed = target / rel
+        if not installed.is_file():
+            missing.append(rel)
+            continue
+        if sha256(installed) != recorded:
+            changed.append(rel)
+    if missing:
+        rep.fail(f"{len(missing)} recorded file(s) missing, e.g. {missing[0]}")
+    if changed:
+        note = f"{len(changed)} file(s) differ from what was installed, e.g. {changed[0]}"
+        rep.warn(note + " (expected if the system has edited itself)") if allow_modified \
+            else rep.fail(note)
+    if not missing and not changed:
+        rep.ok(f"{len(paths)} copied file(s) present and unmodified")
+
+    # Against the shipped source: catches a bad copy at install time, and
+    # distinguishes it from a later self-edit.
+    #
+    # Codex role files are excluded: a warm install splices the pack's slate
+    # into each one, so differing from the shipped file is exactly what a
+    # seeded roster looks like. Their integrity is checked by check_roles
+    # instead, which is the check that actually matters for them.
+    stale = [rel for rel in paths
+             if not rel.startswith(".codex/agents/")
+             and (source / rel).is_file() and paths[rel] != sha256(source / rel)]
+    if stale:
+        rep.warn(f"{len(stale)} file(s) differ from the current shipped system "
+                 f"(e.g. {stale[0]}) — upgrade available, or the copy was not byte-exact")
+    else:
+        rep.ok("copied files match the shipped system")
+
+
+def check_preexisting(target: Path, manifest: dict, rep: Report) -> None:
+    """Nothing the install did not own was overwritten or removed."""
+    baseline = manifest.get("preexisting")
+    if baseline is None:
+        rep.skip("no pre-install baseline recorded — cannot prove host files survived")
+        return
+    owned = set(manifest.get("paths") or {}) | set(manifest.get("generated") or [])
+    consented = set(manifest.get("replaced_with_consent") or [])
+
+    # A path that existed BEFORE and is now claimed as ours was overwritten. The
+    # policy says every such collision is named to the user before anything is
+    # written, so the manifest has to record that it was — otherwise "I own this
+    # file" would silently excuse having clobbered it, and the whole baseline
+    # check could be defeated by over-claiming.
+    unconsented = sorted((set(baseline) & owned) - consented)
+    if unconsented:
+        rep.fail(f"{len(unconsented)} pre-existing file(s) were replaced without being "
+                 f"recorded as agreed, e.g. {unconsented[0]} — either the user was not "
+                 f"asked, or the install over-claimed ownership")
+
+    clobbered, removed = [], []
+    for rel, recorded in sorted(baseline.items()):
+        if rel in owned:
+            continue  # replaced; handled by the consent check above
+        entry = target / rel
+        if not entry.is_file():
+            removed.append(rel)
+        elif sha256(entry) != recorded:
+            clobbered.append(rel)
+    if removed:
+        rep.fail(f"{len(removed)} pre-existing file(s) were REMOVED, e.g. {removed[0]}")
+    if clobbered:
+        rep.fail(f"{len(clobbered)} pre-existing file(s) were OVERWRITTEN, e.g. {clobbered[0]}")
+    if not removed and not clobbered:
+        rep.ok(f"all {len(baseline)} pre-existing file(s) intact")
+
+
+def check_roles(target: Path, source: Path, rep: Report) -> None:
+    """Codex roles parse, are named for their file, and kept their slate region.
+
+    Not every role has one: the reviewer/auditor cards carry no ``memory:`` on
+    the Claude Code side, so the renderer gives them no slate block either. The
+    shipped tree is therefore the authority on which roles *should* have a
+    slate — demanding one from all 46 would fail a perfectly good install.
     """
+    agents = target / ".codex" / "agents"
+    if not agents.is_dir():
+        rep.fail(".codex/agents/ is missing — the roster does not exist")
+        return
+    roles = sorted(agents.glob("*.toml"))
+    bad_toml, bad_name, missing_field, bad_slate = [], [], [], []
+    for role in roles:
+        try:
+            data = tomllib.loads(role.read_text())
+        except (OSError, tomllib.TOMLDecodeError):
+            bad_toml.append(role.name)
+            continue
+        if data.get("name") != role.stem:
+            bad_name.append(role.name)
+        if not data.get("description") or not data.get("developer_instructions"):
+            missing_field.append(role.name)
+        shipped = source / ".codex" / "agents" / role.name
+        if not shipped.is_file():
+            continue  # a role this release does not ship; nothing to compare to
+        try:
+            codex_memory.read_slate(shipped)
+        except codex_memory.SlateError:
+            continue  # slate-less by design (reviewer/auditor)
+        try:
+            codex_memory.read_slate(role)
+        except codex_memory.SlateError:
+            bad_slate.append(role.name)
+    for label, items in (("do not parse as TOML", bad_toml),
+                         ("have name != filename", bad_name),
+                         ("lack description/developer_instructions", missing_field)):
+        if items:
+            rep.fail(f"{len(items)} role file(s) {label} — those consultants do not "
+                     f"exist, silently: {', '.join(items[:3])}")
+    if bad_slate:
+        rep.fail(f"{len(bad_slate)} role file(s) have no readable slate region — the "
+                 f"learned tier is gone for them: {', '.join(bad_slate[:3])}")
+    if not (bad_toml or bad_name or missing_field or bad_slate):
+        rep.ok(f"{len(roles)} role file(s) parse, are correctly named, and carry a slate")
+    if len(roles) != EXPECTED_ROLES:
+        rep.warn(f"{len(roles)} roles installed, expected {EXPECTED_ROLES}")
+
+
+def check_skills(target: Path, is_codex: bool, rep: Report) -> None:
+    """Skill frontmatter is valid YAML with a description.
+
+    The failure this exists for: an unquoted ``": "`` inside ``description:``
+    makes the frontmatter invalid YAML, and Codex then drops the skill without
+    a word. Claude Code tolerates it, so the same tree can work on one provider
+    and be quietly short a skill on the other.
+    """
+    root = target / (".agents" if is_codex else ".claude") / "skills"
+    if not root.is_dir():
+        rep.fail(f"{root.relative_to(target)}/ is missing — no skills installed")
+        return
+    skills = sorted(d for d in root.iterdir() if d.is_dir())
+    bad, no_desc = [], []
+    for skill in skills:
+        md = skill / "SKILL.md"
+        if not md.is_file():
+            bad.append(f"{skill.name} (no SKILL.md)")
+            continue
+        text = md.read_text()
+        if not text.startswith("---\n") or "\n---\n" not in text[4:]:
+            bad.append(f"{skill.name} (no frontmatter)")
+            continue
+        front = text[4:].split("\n---\n", 1)[0]
+        try:
+            data = yaml.safe_load(front)
+        except yaml.YAMLError:
+            bad.append(f"{skill.name} (invalid YAML)")
+            continue
+        if not isinstance(data, dict) or not data.get("description"):
+            no_desc.append(skill.name)
+    if bad:
+        rep.fail(f"{len(bad)} skill(s) have unreadable frontmatter — dropped "
+                 f"silently: {', '.join(bad[:3])}")
+    if no_desc:
+        rep.fail(f"{len(no_desc)} skill(s) have no description — never routed to: "
+                 f"{', '.join(no_desc[:3])}")
+    if not bad and not no_desc:
+        rep.ok(f"{len(skills)} skill(s) have valid frontmatter with a description")
+    if len(skills) != EXPECTED_SKILLS:
+        rep.warn(f"{len(skills)} skills installed, expected {EXPECTED_SKILLS}")
+
+
+def check_wrapper(target: Path, manifest: dict, is_codex: bool, rep: Report) -> None:
+    """The wrapper is exactly the template plus the recorded substitutions."""
+    wrapper = target / WRAPPER_NAME
+    if not wrapper.is_file():
+        rep.fail(f"{WRAPPER_NAME} is missing — nothing starts the full system")
+        return
+    if not wrapper.stat().st_mode & 0o111:
+        rep.fail(f"{WRAPPER_NAME} is not executable")
+    template = TEMPLATES / ("madagents-codex.sh" if is_codex else "madagents.sh")
+    expected = render_wrapper(
+        template.read_text(),
+        manifest.get("prompt_files") or [],
+        manifest.get("disallowed_tools") or [],
+    )
+    if wrapper.read_text() != expected:
+        rep.fail(f"{WRAPPER_NAME} does not match {template.name} with the recorded "
+                 f"substitutions — it was edited or assembled by hand")
+    else:
+        rep.ok(f"{WRAPPER_NAME} matches {template.name} exactly")
+    for rel in manifest.get("prompt_files") or []:
+        if not (target / rel).is_file():
+            rep.fail(f"{WRAPPER_NAME} starts the lead with {rel}, which does not exist")
+
+
+def check_codex_extras(target: Path, rep: Report) -> None:
+    """The two Codex-only things that fail silently when absent."""
+    header = target / "prompts" / "lead-slate-header.md"
+    if not header.is_file():
+        rep.fail("prompts/lead-slate-header.md is missing — the wrapper aborts once "
+                 "the lead has written a slate")
+    elif header.read_text().rstrip("\n") != codex_memory.lead_slate_header().rstrip("\n"):
+        rep.warn("prompts/lead-slate-header.md differs from the shipped header")
+    else:
+        rep.ok("lead slate header matches the shipped text")
+
+    # Trust is what decides whether .codex/ is read at all. Untrusted, the
+    # roster silently does not exist — the single most confusing Codex failure.
+    # Honour CODEX_HOME the way Codex itself does; assuming ~/.codex reports a
+    # missing config on any host that relocates it.
+    codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+    config = codex_home / "config.toml"
+    resolved = str(target.resolve())
+    if not config.is_file():
+        rep.warn(f"no {config} — trust this folder on the first `codex` run, or the "
+                 f"roster will silently not exist")
+        return
+    try:
+        projects = tomllib.loads(config.read_text()).get("projects", {})
+    except (OSError, tomllib.TOMLDecodeError):
+        rep.warn(f"{config} does not parse; cannot confirm this folder is trusted")
+        return
+    entry = projects.get(resolved) or {}
+    if entry.get("trust_level") == "trusted":
+        rep.ok("project is recorded as trusted in $CODEX_HOME/config.toml")
+    else:
+        rep.warn(f"{resolved} is not recorded as trusted — answer yes on the first "
+                 f"`codex` run here, or .codex/ is ignored entirely")
+
+
+def check_claude_memory(target: Path, rep: Report) -> None:
+    """Auto-memory is on and points inside this folder."""
     settings = target / ".claude" / "settings.local.json"
+    if not settings.is_file():
+        rep.fail(".claude/settings.local.json is missing — the lead's slate will be "
+                 "written outside this folder and lost")
+        return
     try:
         data = json.loads(settings.read_text())
-    except (OSError, json.JSONDecodeError):
-        data = {}
-    if not isinstance(data, dict):
-        data = {}
-    data["autoMemoryEnabled"] = bool(preset.auto_memory_enabled)
-    if preset.auto_memory_enabled:
-        data["autoMemoryDirectory"] = str(target / ".claude" / "lead-memory")
+    except (OSError, json.JSONDecodeError) as exc:
+        rep.fail(f".claude/settings.local.json does not parse: {exc}")
+        return
+    if not data.get("autoMemoryEnabled"):
+        rep.fail("autoMemoryEnabled is not set — the 46 consultant slates will not load")
+        return
+    want = str(target / ".claude" / "lead-memory")
+    got = data.get("autoMemoryDirectory")
+    if got != want:
+        rep.fail(f"autoMemoryDirectory is {got!r}, expected {want!r} — the lead's slate "
+                 f"would be read from somewhere else")
     else:
-        data.pop("autoMemoryDirectory", None)
-    settings.parent.mkdir(parents=True, exist_ok=True)
-    settings.write_text(json.dumps(data, indent=2) + "\n")
+        rep.ok("auto-memory is enabled and points at this folder's lead-memory")
 
 
-def _append_prompt_paths(preset, system_dir: Path, target: Path) -> list[str]:
-    """Target-relative paths of the system-prompt files the wrapper appends.
+def cmd_verify(target: Path, allow_modified: bool) -> int:
+    if not target.is_dir():
+        print(f"ERROR: {target} is not a directory", file=sys.stderr)
+        return 2
+    print(f"madagents verify: {target}")
+    rep = Report()
 
-    ``append_system_prompt_file`` may name one file or several, resolved against
-    the repo root. Files inside the shipped system are already in the target
-    (they came with ``prompts/``); anything else is copied into ``prompts/`` so
-    the install stays self-contained and keeps working if this repo moves.
-    """
-    configured = preset.append_system_prompt_file or []
-    if isinstance(configured, str):
-        configured = [configured]
-    rels: list[str] = []
-    for entry in configured:
-        src = Path(entry)
-        if not src.is_absolute():
-            src = REPO_ROOT / src
-        try:
-            rel = src.resolve().relative_to(system_dir.resolve())
-        except ValueError:
-            dst = target / "prompts" / src.name
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            rels.append(f"prompts/{src.name}")
-            continue
-        if not (target / rel).is_file():
-            _fail(f"system prompt {src} was not installed (expected at {target / rel})")
-        rels.append(str(rel))
-    return rels
+    manifest = load_manifest(target, rep)
+    if manifest is None:
+        print("\n1 check failed. Nothing else could be checked without a manifest.")
+        return 1
 
+    provider = manifest["provider"]
+    is_codex = provider == "codex"
+    source = SYSTEM_BY_PROVIDER[provider]
 
-def _write_wrapper(preset, target: Path, append_rels: list[str]) -> None:
-    """Generate ``madagents.sh`` — the launcher's job, reduced to what applies here.
+    check_copies(target, manifest, source, rep, allow_modified)
+    check_preexisting(target, manifest, rep)
+    check_skills(target, is_codex, rep)
+    check_wrapper(target, manifest, is_codex, rep)
+    if is_codex:
+        check_roles(target, source, rep)
+        check_codex_extras(target, rep)
+    else:
+        check_claude_memory(target, rep)
 
-    Everything Claude Code can discover from a directory (the roster, the
-    skills, ``CLAUDE.md``, the settings) is left to it. What it cannot — the
-    appended system prompt, the model and effort from ``config.yaml`` — is
-    baked in here, so a bare ``claude`` in this folder still works but the
-    wrapper is what makes it the full system.
-    """
-    flags: list[str] = []
-    for rel in append_rels:
-        flags.append(f'--append-system-prompt "$(cat -- "{rel}")"')
-    if preset.model:
-        flags.append(f'--model "{preset.model}"')
-    if preset.reasoning_effort:
-        flags.append(f'--effort "{preset.reasoning_effort}"')
-    if preset.disallowed_tools:
-        joined = " ".join(f'"{t}"' for t in preset.disallowed_tools)
-        flags.append(f"--disallowed-tools {joined}")
-    flag_text = " \\\n     ".join(flags)
-
-    missing_checks = "\n".join(
-        f'[[ -f "{rel}" ]] || {{ echo "ERROR: {rel} is missing — reinstall." >&2; exit 1; }}'
-        for rel in append_rels
-    )
-
-    wrapper = f"""#!/usr/bin/env bash
-# MadAgents — start a session on the agent system installed in this folder.
-#
-#   ./{WRAPPER_NAME}              start a session
-#   ./{WRAPPER_NAME} --resume     anything unrecognised is forwarded to claude
-#
-# What this adds over a bare `claude` here: the lead's system prompt, and the
-# model settings this system was configured with. The roster, the skills, the
-# learned tier and CLAUDE.md are picked up from this directory by Claude Code
-# itself. Generated by install/installer.py — re-running the installer with
-# --upgrade regenerates it.
-set -euo pipefail
-HERE="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd)"
-cd -- "$HERE"
-
-{missing_checks}
-
-# Auto-memory is pinned by ABSOLUTE path (Claude Code requires one), so moving
-# this folder would silently detach the learned tier — the 46 consultant slates
-# and the lead's — and the session would come up cold without saying so.
-# Re-point it here instead, every start, so a moved install just works.
-if command -v python3 >/dev/null 2>&1; then
-  python3 - "$HERE" <<'PY' || true
-import json, sys
-from pathlib import Path
-
-here = Path(sys.argv[1])
-settings = here / ".claude" / "settings.local.json"
-try:
-    data = json.loads(settings.read_text())
-except Exception:
-    sys.exit(0)
-if not isinstance(data, dict) or not data.get("autoMemoryEnabled"):
-    sys.exit(0)
-want = str(here / ".claude" / "lead-memory")
-if data.get("autoMemoryDirectory") != want:
-    data["autoMemoryDirectory"] = want
-    settings.write_text(json.dumps(data, indent=2) + "\\n")
-    print(f"madagents: this folder moved — auto-memory re-pointed at {{want}}")
-PY
-fi
-
-exec claude {flag_text} "$@"
-"""
-    path = target / WRAPPER_NAME
-    path.write_text(wrapper)
-    path.chmod(0o755)
-
-
-def _seed_environment(target: Path) -> None:
-    """Seed ``CLAUDE.md``, the environment description, when there is none.
-
-    Written once and never again: from here on it is the session's file, to
-    correct and extend as it learns where things actually are. That is the whole
-    point of it — on a user's own machine nothing can be assumed about where
-    MadGraph lives, so the description has to be earned rather than declared.
-    """
-    target_file = target / "CLAUDE.md"
-    if target_file.exists():
-        return
-    try:
-        text = _ENV_TEMPLATE.read_text(encoding="utf-8")
-    except OSError:
-        return
-    target_file.write_text(text, encoding="utf-8")
-
-
-def _git_init(target: Path) -> None:
-    """Make the target its own git repo, so it is a deterministic project root.
-
-    Claude Code resolves the project root to the enclosing git repository when
-    there is one. Without this, installing inside an existing repo would put the
-    project root at *that* repo's top, and every ``memory: project`` slate would
-    be read from and written to a ``.claude/`` that is not this install's. A
-    nested repo is exactly how the container gets the same guarantee for its
-    ``output/``.
-    """
-    if (target / ".git").exists():
-        return
-    try:
-        subprocess.run(["git", "init", "-q", str(target)], check=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(
-            f"WARNING: could not git-init {target} ({exc}). If this folder sits "
-            f"inside another git repository, Claude Code will resolve the "
-            f"project root to that repository and the learned tier will not load.",
-            file=sys.stderr,
-        )
-
-
-def _print_memory_options() -> None:
-    for name, description in memory_options():
-        print(f"  {name:18s} {description}")
+    print()
+    if rep.failed:
+        print(f"{rep.failed} check(s) FAILED, {rep.warned} warning(s). "
+              f"This install is not sound.")
+        return 1
+    print(f"All checks passed ({rep.warned} warning(s)).")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="installer.py",
-        description="Install the MadAgents agent system into a folder (no container).",
+        description="Verify a MadAgents install. Read-only — writes nothing.",
+        epilog="Installing is the agent's job: run `claude` or `codex` in install/.",
     )
-    parser.add_argument("target", nargs="?", help="folder to install into")
-    parser.add_argument(
-        "--memory", default=None,
-        help="memory pack to seed, or 'none' for a cold start (default: "
-             f"{DEFAULT_MEMORY})",
-    )
-    parser.add_argument(
-        "--upgrade", action="store_true",
-        help="replace the shipped agent system in an existing install, keeping "
-             "its learned tier, CLAUDE.md and memory pack",
-    )
-    parser.add_argument(
-        "--no-git", action="store_true",
-        help="skip git init (only if the folder is already its own repo root)",
-    )
-    parser.add_argument(
-        "--list-memory", action="store_true", help="list memory packs and exit",
-    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    v = sub.add_parser("verify", help="check that an install is intact")
+    v.add_argument("target", help="the installed folder")
+    v.add_argument("--allow-modified", action="store_true",
+                   help="treat a changed system file as a warning, not a failure "
+                        "(use once the system has begun editing itself)")
     args = parser.parse_args(argv)
-
-    if args.list_memory:
-        _print_memory_options()
-        return 0
-    if not args.target:
-        parser.error("target is required (or pass --list-memory)")
-
-    system_dir = DEFAULT_SYSTEM
-    if not (system_dir / "config.yaml").is_file():
-        _fail(f"agent system not found at {system_dir}",
-              "Run this from a MadAgents checkout.")
-    preset = load_preset(system_dir)
-
-    target = Path(args.target).expanduser().resolve()
-    installed = (target / ".claude").exists()
-
-    if args.upgrade:
-        if not installed:
-            _fail(f"nothing installed at {target}",
-                  "Drop --upgrade to install here for the first time.")
-        if args.memory is not None:
-            _fail("--upgrade keeps the existing learned tier, so --memory does not apply",
-                  "Install into a fresh folder to start from a different pack.")
-    elif installed:
-        _fail(f"{target / '.claude'} already exists",
-              "Use --upgrade to refresh the agent system there, or pick another folder.")
-
-    memory_name = args.memory if args.memory is not None else DEFAULT_MEMORY
-    pack = None
-    if not args.upgrade and memory_name.lower() not in NO_MEMORY:
-        pack = _resolve_memory_pack(memory_name)
-
-    target.mkdir(parents=True, exist_ok=True)
-    print(f"madagents install: {'upgrading' if args.upgrade else 'installing'} "
-          f"{preset.name!r} → {target}")
-
-    _copy_system(system_dir, target, _SYSTEM_PARTS)
-    if not args.upgrade:
-        _seed_memory(pack, target)
-    _write_settings(preset, target)
-    _write_wrapper(preset, target, _append_prompt_paths(preset, system_dir, target))
-    _seed_environment(target)
-    if not args.no_git:
-        _git_init(target)
-
-    n_agents = len(list((target / ".claude" / "agents").glob("*.md")))
-    n_skills = len([d for d in (target / ".claude" / "skills").iterdir() if d.is_dir()])
-    if args.upgrade:
-        print(f"madagents install: agent system replaced ({n_agents} agents, "
-              f"{n_skills} skills); learned tier untouched")
-    else:
-        slates = target / ".claude" / "agent-memory"
-        n_slates = len([d for d in slates.iterdir() if d.is_dir()]) if slates.is_dir() else 0
-        n_pages = len(list((target / ".madagents" / "wiki").rglob("*.md")))
-        print(f"madagents install: {n_agents} agents, {n_skills} skills, "
-              f"memory {pack.name if pack else 'none'} "
-              f"({n_slates} slates, {n_pages} wiki pages)")
-    print(f"madagents install: start it with  cd {target} && ./{WRAPPER_NAME}")
-    return 0
+    return cmd_verify(Path(args.target).expanduser().resolve(), args.allow_modified)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -1,0 +1,15 @@
+name: madagents_codex
+provider: codex
+mount_madgraph_docs: false
+max_turns: null
+disallowed_tools: []
+append_system_prompt_file: madagents_codex/prompts/lead-discipline.md
+# No /agent_wikis bind: the wiki rides inside the /output project tree at
+# /output/.madagents/wiki/. Omitting the bind is what selects the in-output
+# wiki layout.
+extra_binds: []
+# On Codex the learned tier loads through the role files' developer_instructions
+# (consultants) and the lead's appended prompt (the lead) rather than through a
+# harness setting, so there is nothing to switch on. The key stays true to mean
+# "this system has a learned tier"; see tools/render_codex.py.
+auto_memory_enabled: true

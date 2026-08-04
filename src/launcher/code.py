@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import apptainer, claude_binary, images, scheduler
+from . import apptainer, claude_binary, codex_binary, images, scheduler
 from .errors import LaunchError, die
 from .lock import madrun_lock
 from .paths import REPO_ROOT, ensure_file, resolve_path
@@ -21,8 +21,20 @@ from .workdir import make_session_uuid, make_stamp, make_workdir
 
 
 # Mountpoints that must exist inside the overlay for the binds below to attach.
+# Both providers' mountpoints are prepared regardless of which one this run
+# uses: creating a directory in the overlay is free, and an overlay stays with
+# its instance across restarts, so pinning them to the provider would strand an
+# instance the first time it was started the other way.
 _OVERLAY_DIRS_BASE: tuple[str, ...] = (
-    "/workspace", "/output", "/madgraph_docs", "/opt/claude", "/opt/.config/.claude",
+    "/workspace", "/output", "/madgraph_docs",
+    "/opt/claude", "/opt/.config/.claude",
+    "/opt/codex", "/opt/.config/.codex",
+    # opencode: the bound host binary, its four XDG roots, and this launch's
+    # endpoint config + token file. A bind whose destination does not exist in
+    # the container is a FATAL instance-start failure, not a warning — so every
+    # path any provider might bind has to be prepared here, whether or not this
+    # run uses it.
+    "/opt/opencode", "/opt/.config/opencode-home", "/opt/.config/opencode-run",
 )
 
 
@@ -123,6 +135,55 @@ def _claude_code_env_passthrough() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k.startswith("CLAUDE_CODE_")}
 
 
+def _with_lead_slate(append_text: str, output_dir: Path) -> str:
+    """Concatenate the lead's slate onto its appended instructions."""
+    from .codex_memory import LEAD_SLATE_REL, lead_slate_header
+
+    try:
+        text = (output_dir / LEAD_SLATE_REL).read_text(encoding="utf-8").strip()
+    except OSError:
+        return append_text
+    if not text:
+        return append_text
+    block = f"{lead_slate_header()}\n\n{text}"
+    return f"{append_text}\n\n{block}" if append_text else block
+
+
+def _seed_codex_trust(codex_config_dir: Path, paths: tuple[str, ...]) -> None:
+    """Mark the in-container bind-mount paths trusted in ``config.toml``.
+
+    The Codex counterpart of ``_seed_trusted_projects``, and **not** cosmetic
+    the way that one is. Claude Code's trust dialog blocks startup, which is
+    loud; Codex's untrusted state is silent — it simply ignores the project's
+    whole ``.codex/`` layer, so the 46 consultants do not exist and nothing
+    says so. The run would come up looking like plain Codex.
+
+    Appends only: an existing ``[projects."…"]`` entry is left alone, and any
+    other config in the file is untouched. TOML is written by hand rather than
+    round-tripped because the stdlib can read it but not write it, and
+    reformatting a user's config to add one key would be a poor trade.
+    """
+    config_path = codex_config_dir / "config.toml"
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    missing = [p for p in paths if f'[projects."{p}"]' not in text]
+    if not missing:
+        return
+    block = "".join(
+        f'\n[projects."{p}"]\ntrust_level = "trusted"\n' for p in missing
+    )
+    header = "" if text else (
+        "# Written by madrun: the container's bind-mount roots are trusted so\n"
+        "# Codex loads the project's .codex/ layer (the agent roster).\n"
+    )
+    if text and not text.endswith("\n"):
+        text += "\n"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(header + text + block, encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
 
@@ -147,7 +208,8 @@ def main(argv: list[str] | None = None) -> int:
             hint="Build a run instance with ./madrun.sh and launch it "
                  "with its own ./run.sh.",
         )
-    print(f"madrun: agent system {system_dir} (.claude: {preset.claude_dir})", flush=True)
+    trees = ", ".join(str(host) for host, _ in preset.agent_dirs())
+    print(f"madrun: agent system {system_dir} [{preset.provider}] ({trees})", flush=True)
     print("madrun: starting...", flush=True)
 
     instance_prefix = _instance_prefix()
@@ -157,12 +219,17 @@ def main(argv: list[str] | None = None) -> int:
         resolve_path(os.environ.get("RUN_DIR") or _DEFAULT_RUN_DIR)
         or REPO_ROOT / _DEFAULT_RUN_DIR
     )
-    # CLAUDE_CONFIG_DIR precedence: caller shell env, else config.env
-    # (load_config_env populates it via setdefault). If neither sets it,
-    # claude_config_dir stays None — the launcher then binds no host config
-    # dir and sets no CLAUDE_CONFIG_DIR in the container, so the in-container
-    # claude falls back to its own default.
-    claude_config_dir = resolve_path(os.environ.get("CLAUDE_CONFIG_DIR"))
+    # The CLI's config directory — where its login lives, and the one thing a
+    # run cannot obtain for itself. Precedence: caller shell env, else
+    # config.env (load_config_env populates it via setdefault). If neither sets
+    # it, this stays None: the launcher then binds no host config dir and sets
+    # no variable in the container, so the in-container CLI falls back to its
+    # own default (and will ask the user to log in).
+    if preset.is_codex:
+        cli_config_var, cli_config_container = "CODEX_HOME", "/opt/.config/.codex"
+    else:
+        cli_config_var, cli_config_container = "CLAUDE_CONFIG_DIR", "/opt/.config/.claude"
+    cli_config_dir = resolve_path(os.environ.get(cli_config_var))
 
     # Each image type is built into its own folder (image/<type>/madagents.sif),
     # so with no APPTAINER_IMAGE the launcher picks whichever is built rather
@@ -206,9 +273,12 @@ def main(argv: list[str] | None = None) -> int:
             [] if _resume_or_continue_flag(argv) else ["--session-id", session_uuid]
         )
 
-        if claude_config_dir is not None:
-            claude_config_dir.mkdir(parents=True, exist_ok=True)
-            _seed_trusted_projects(claude_config_dir)
+        if cli_config_dir is not None:
+            cli_config_dir.mkdir(parents=True, exist_ok=True)
+            if preset.is_codex:
+                _seed_codex_trust(cli_config_dir, _TRUSTED_CONTAINER_PATHS)
+            else:
+                _seed_trusted_projects(cli_config_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Cosmetic cleanup: legacy /output/.mcp.json from pre-refactor launches.
@@ -216,7 +286,13 @@ def main(argv: list[str] | None = None) -> int:
         if stale_mcp.exists():
             stale_mcp.unlink()
 
-        host_claude = claude_binary.detect_host_claude()
+        host_cli = (
+            codex_binary.detect_host_codex() if preset.is_codex
+            else claude_binary.detect_host_claude()
+        )
+        cli_install_container = (
+            codex_binary.CONTAINER_INSTALL_DIR if preset.is_codex else "/opt/claude"
+        )
 
         instance_name: str | None = None
         cleaned = [False]
@@ -254,13 +330,16 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
-        # Without the harness (a bare ``python3 -m launcher code``)
-        # preset.claude_dir IS madagents/.claude, so the session writes its
-        # memory straight into git-tracked state.
-        if Path(preset.preset_dir).resolve() == (REPO_ROOT / "madagents").resolve():
+        # Without the harness (a bare ``python3 -m launcher code``) the bound
+        # trees ARE the shipped ones, so the session writes its memory straight
+        # into git-tracked state. True of both providers — and worse on Codex,
+        # where a consultant's slate lives inside the tracked role file itself.
+        if Path(preset.preset_dir).resolve() in (
+            (REPO_ROOT / "madagents").resolve(), (REPO_ROOT / "madagents_codex").resolve(),
+        ):
             print(
-                "madrun: NOTE — running the tracked madagents/ directly, so the "
-                "session's memory writes land in the shipped tree. Build a run "
+                f"madrun: NOTE — running the tracked {preset.preset_dir.name}/ directly, so "
+                "the session's memory writes land in the shipped tree. Build a run "
                 "instance with ./madrun.sh instead.",
                 flush=True,
             )
@@ -298,15 +377,16 @@ def main(argv: list[str] | None = None) -> int:
             binds: list[tuple[str, str, str | None]] = [
                 (str(workdir / "workspace"), "/workspace", None),
             ]
-            # Host claude config dir → /opt/.config/.claude. Omitted when
-            # CLAUDE_CONFIG_DIR is unset — the in-container claude then uses
-            # its own default config location.
-            if claude_config_dir is not None:
-                binds.append((str(claude_config_dir), "/opt/.config/.claude", None))
+            # Host CLI config dir. Omitted when the variable is unset — the
+            # in-container CLI then uses its own default config location.
+            if cli_config_dir is not None:
+                binds.append((str(cli_config_dir), cli_config_container, None))
             binds.append((str(output_dir), "/output", None))
-            # The instance's .claude at /output/.claude — appended AFTER /output
-            # so the parent bind is in place.
-            binds.append((str(preset.claude_dir), "/output/.claude", None))
+            # The instance's agent-system tree(s) under /output — appended
+            # AFTER /output so the parent bind is in place. One directory for
+            # Claude Code, two for Codex; see Preset.agent_dirs().
+            for host_dir, container_path in preset.agent_dirs():
+                binds.append((str(host_dir), container_path, None))
             if preset.mount_madgraph_docs:
                 # Either the system's declared corpus, or one shipped alongside
                 # its config.yaml. The canonical madagents system sets
@@ -327,8 +407,8 @@ def main(argv: list[str] | None = None) -> int:
             # loader). Empty for the canonical madagents system.
             for eb in preset.extra_binds:
                 binds.append((str(eb.host), eb.container, eb.mode))
-            if host_claude is not None:
-                binds.append((str(host_claude.install_dir), "/opt/claude", "ro"))
+            if host_cli is not None:
+                binds.append((str(host_cli.install_dir), cli_install_container, "ro"))
 
             # Site-specific bucket — bound rw at /internals/ in the container.
             # Holds cluster_info.md and any future host-specific facts.
@@ -347,8 +427,8 @@ def main(argv: list[str] | None = None) -> int:
                 "TERM": os.environ.get("TERM", "xterm-256color"),
                 "LANG": os.environ.get("LANG", "C.UTF-8"),
             }
-            if claude_config_dir is not None:
-                instance_envs["CLAUDE_CONFIG_DIR"] = "/opt/.config/.claude"
+            if cli_config_dir is not None:
+                instance_envs[cli_config_var] = cli_config_container
             instance_envs.update(sched_envs)
 
             try:
@@ -381,15 +461,17 @@ def main(argv: list[str] | None = None) -> int:
                 die(f"failed to start Apptainer instance: {e}")
 
             try:
-                if host_claude is not None:
-                    claude_container_bin = host_claude.container_bin_path
+                binary = codex_binary if preset.is_codex else claude_binary
+                cli_label = "Codex" if preset.is_codex else "Claude Code"
+                if host_cli is not None:
+                    cli_container_bin = host_cli.container_bin_path
                 else:
-                    claude_container_bin = claude_binary.resolve_in_container(
+                    cli_container_bin = binary.resolve_in_container(
                         apptainer_bin, instance_name,
                     )
-                    if not claude_container_bin:
-                        print("Claude Code not found on host. Installing inside the container...")
-                        claude_container_bin = claude_binary.install_in_container(
+                    if not cli_container_bin:
+                        print(f"{cli_label} not found on host. Installing inside the container...")
+                        cli_container_bin = binary.install_in_container(
                             apptainer_bin, instance_name,
                         )
 
@@ -397,41 +479,92 @@ def main(argv: list[str] | None = None) -> int:
                     "TERM": os.environ.get("TERM", "xterm-256color"),
                     "LANG": os.environ.get("LANG", "C.UTF-8"),
                 }
-                if claude_config_dir is not None:
-                    exec_envs["CLAUDE_CONFIG_DIR"] = "/opt/.config/.claude"
+                if cli_config_dir is not None:
+                    exec_envs[cli_config_var] = cli_config_container
                 exec_envs.update(sched_envs)
-                exec_envs.update(_claude_code_env_passthrough())
+                if not preset.is_codex:
+                    exec_envs.update(_claude_code_env_passthrough())
 
-                claude_argv = [
+                cli_argv = [
                     "bash", "-c",
                     'export PATH="/root/.local/bin:${PATH}"; exec "$@"', "_",
-                    claude_container_bin,
+                    cli_container_bin,
                 ]
                 system_prompt_append = preset.resolve_system_prompt(REPO_ROOT)
-                if system_prompt_append:
-                    claude_argv += ["--append-system-prompt", system_prompt_append]
-                if preset.disallowed_tools:
-                    claude_argv += ["--disallowed-tools", *preset.disallowed_tools]
+                if preset.is_codex:
+                    # No --sandbox flag: the sandbox posture is the operator's
+                    # to choose, the same way the Claude Code path pre-approves
+                    # nothing.
+                    #
+                    # Know what you are choosing between. Codex's sandbox is
+                    # bubblewrap, and bubblewrap cannot nest inside Apptainer's
+                    # user namespace — so under Codex's default workspace-write
+                    # mode every command inside the container dies with
+                    #   bwrap: Can't bind mount /oldroot/ on /newroot/
+                    # and comes back as an approval request. A containerized
+                    # session that needs to run commands therefore wants
+                    # `--sandbox danger-full-access` passed through run.sh
+                    # (argv is forwarded to codex verbatim, below); the
+                    # container itself is then the boundary — a per-instance
+                    # overlay under --cleanenv, seeing only the bound paths,
+                    # exactly the boundary the Claude Code path relies on.
+                    #
+                    # An install (no container) has no such conflict and keeps
+                    # Codex's own sandbox, which there is the only boundary.
+                    # The lead's slate has no per-role file to ride in, so it is
+                    # concatenated onto the append here. That makes it loaded at
+                    # session start, which also means a slate the lead writes is
+                    # live from the *next* session — the same as Claude Code,
+                    # where auto-memory is read once at start-up.
+                    system_prompt_append = _with_lead_slate(system_prompt_append, output_dir)
+                    if system_prompt_append:
+                        # Additive: Codex splices this into its own developer
+                        # message rather than replacing it (unlike
+                        # model_instructions_file, which would drop the built-in
+                        # tool and sandbox instructions along with it).
+                        cli_argv += ["-c", f"developer_instructions={system_prompt_append}"]
+                    if preset.disallowed_tools:
+                        # Codex scopes tools by sandbox and permission profile,
+                        # per role, not by a global deny-list — so this key has
+                        # no equivalent to translate into.
+                        print(
+                            "madrun: NOTE — disallowed_tools is set in config.yaml but has no "
+                            "Codex equivalent; restrict tools per role (sandbox_mode) or via "
+                            "the permission profile in .codex/config.toml. Ignoring it.",
+                            flush=True,
+                        )
+                else:
+                    if system_prompt_append:
+                        cli_argv += ["--append-system-prompt", system_prompt_append]
+                    if preset.disallowed_tools:
+                        cli_argv += ["--disallowed-tools", *preset.disallowed_tools]
+                    # --session-id is Claude-Code-only; Codex names sessions itself
+                    # and resumes them with its `resume` subcommand.
+                    cli_argv += [*session_id_args]
                 if preset.max_turns is not None:
-                    # No interactive equivalent — --max-turns is a print-mode
-                    # (-p) flag. Say so rather than dropping the key silently.
+                    # No interactive equivalent on either CLI — Claude Code's
+                    # --max-turns is a print-mode (-p) flag. Say so rather than
+                    # dropping the key silently.
                     print(
                         "madrun: NOTE — max_turns is set in config.yaml but only "
-                        "applies to non-interactive (-p) runs; ignoring it.",
+                        "applies to non-interactive runs; ignoring it.",
                         flush=True,
                     )
-                if preset.model:
-                    claude_argv += ["--model", preset.model]
-                if preset.reasoning_effort:
-                    claude_argv += ["--effort", preset.reasoning_effort]
-                claude_argv += [*session_id_args, *argv]
+                # No --model / --effort: this is an interactive session with a
+                # human at the terminal, so the model and the reasoning effort
+                # are theirs to pick — in-session, or on the command line, which
+                # the passthrough below forwards verbatim. (The benchmark
+                # spawner is the opposite case and does pin them: a bench spawn
+                # is unattended and the (preset, model, effort) cell IS the
+                # experiment. Don't copy that here.)
+                cli_argv += [*argv]
 
                 cmd = [str(apptainer_bin), "exec", "--cleanenv"]
                 for k, v in exec_envs.items():
                     cmd += ["--env", f"{k}={v}"]
                 # CWD is /output: the project root, where the instance's .claude
                 # is mounted and where `memory: project` resolves.
-                cmd += ["--pwd", "/output", f"instance://{instance_name}", *claude_argv]
+                cmd += ["--pwd", "/output", f"instance://{instance_name}", *cli_argv]
 
                 # Final guard: nothing auth-related may be in the env passed
                 # to the claude subprocess. apptainer --cleanenv strips host
@@ -439,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
                 # entry accidentally re-introducing one).
                 for k in exec_envs:
                     if k.endswith("_API_KEY") or k.endswith("_AUTH_TOKEN"):
-                        die(f"refusing to exec claude: exec_envs contains {k!r}")
+                        die(f"refusing to exec {cli_label}: exec_envs contains {k!r}")
                 assert_no_api_keys()
 
                 subprocess.run(cmd)

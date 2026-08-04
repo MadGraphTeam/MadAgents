@@ -1,0 +1,253 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "prompts/lead-discipline.md",
+    ".claude/lead-memory/MEMORY.md"
+  ],
+  "permission": {
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "lsp": "allow",
+    "todowrite": "allow",
+    "task": "allow",
+    "skill": "allow",
+    "edit": "ask",
+    "bash": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  },
+  "agent": {
+    "ma-aloha-consultant": {
+      "description": "**Engage when** the symptom is in the GENERATED helicity routines — ALOHA fails on a model's Lorentz structure (exotic/high-spin, custom lorentz.py), `Source/DHELAS` will not compile, or an amplitude value looks wrong; when you must READ or CALL exported ME routines — arg layout, ±IC(i) nsf/nsv signs; when the EMITTED propagator numerator under unitary gauge / complex mass matters. **In slice:** aloha/ routine building + writers (kernel=symbolic, writer=lowering), Lorentz primitives, HELAS call signatures — AND the stock HELAS library those calls land in (fixed and pre-dating MG5: read it, never re-derive it). **Not mine:** HelasMatrixElement / helicity sums (helas-amplitude); do_output (output); the UFO's lorentz.py (ufo); CHOOSING the gauge (model-loader); loop R2/UV (madloop).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-aloha-consultant.md}\n\n{file:../.claude/agent-memory/ma-aloha-consultant/MEMORY.md}"
+    },
+    "ma-amcatnlo-consultant": {
+      "description": "**Engage when** an NLO run's ACCEPTANCE, NORMALISATION, BEAMS, SHOWER, ACCURACY or WEIGHTS are at stake. Co-dispatch nlo-syntax: it owns the bracket, I own the run. **In slice:** the NLO run card — a DIFFERENT class from the LO card, own names/defaults: IR-safe cutting (jets clustered BEFORE cuts, dressed leptons); the CENTRAL scale/PDF (own dyn-scale set); the BEAMS `lpp`/`pdlabel` — a non-proton beam (photon/UPC, lepton) or DIS gates HERE; `parton_shower` + the engines offered — a non-PY8 one (Herwig, PY6) is chosen HERE; fixed-order vs shower-matched; event weights, incl. NEGATIVE. **Not mine:** the LO run card (LO cut/scale/beam slices); the merging SCHEME + its scale (matching — `ickkw` is MY key, ITS choice); PY8 cards + execution (pythia8); madloop; fks; nlo-export; nlo-model.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-amcatnlo-consultant.md}\n\n{file:../.claude/agent-memory/ma-amcatnlo-consultant/MEMORY.md}"
+    },
+    "ma-blind-spot-auditor": {
+      "description": "**In slice:** scan the assembled spec + per-consultant summary against MadGraph's pipeline. Identify code paths / pipeline stages the consultant trail did not cover for this input. Return a structured list of detected blind spots, each with a recommended consultant to dispatch. **Common redirects (non-exhaustive):** actually walking source for a flagged region (the dispatched consultant); authoring values (the slice that owns the value); physics judgments (ma-physics-consultant); correctness reconciliation (lead's Stage 5); MadGraph runtime evidence (ma-probe).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-blind-spot-auditor.md}"
+    },
+    "ma-bw-window-consultant": {
+      "description": "**Engage when** a propagator is forced OFF its mass pole and the on-shell window decides whether events survive: a parent below its daughters' mass sum, a daughter pinned off-peak by a forced decay — the default +-bwcutoff*Gamma window then silently cuts sigma to ~zero, so bwcutoff must be DERIVED per leg ((m_pole-floor)/Gamma_eff), never defaulted; a width so tiny/zero that the sampling floor, Gamma/M gate or NWA jacobian moves sigma; whether a resonance reaches the LHE as status-2. **In slice:** `bwcutoff`, `small_width_treatment`, the `cut_bw`/OnBW test, and the `from_decay` derivation `cut_decays` keys on (cut APPLICATION is kinematic-cuts'). **Not mine:** which gForceBW the syntax writes (chain-decay); channel maps/sigma (phase-space); cut VALUES (kinematic-cuts); widths (madwidth).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-bw-window-consultant.md}\n\n{file:../.claude/agent-memory/ma-bw-window-consultant/MEMORY.md}"
+    },
+    "ma-chain-decay-consultant": {
+      "description": "**Engage when** the decay is written INTO the process line. `X > a b` inside `generate` restricts the amplitude to that resonant topology — not the inclusive same-final-state ME — and forces the mother's BW. Also: a 2+-level cascade whose sub-decay is SILENTLY DISCARDED unless parenthesised (\"it parsed\" != \"it bound\"); an order budget that must reach (or not reach) a decay vertex; a chain on a perturbed `[QCD]` process (rejected — MadSpin is then the only route). **In slice:** paren-scope x pdg-match binding; `onshell` -> `gForceBW` (`decayBW.inc`); orders through the chain; the flattened leaf final state. **Not mine:** what the window does to a forced BW (bw-window); decaying events after the ME (madspin); `$`/`/` filters (diagram-filter); channels, sigma (phase-space).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-chain-decay-consultant.md}\n\n{file:../.claude/agent-memory/ma-chain-decay-consultant/MEMORY.md}"
+    },
+    "ma-color-decomposition-consultant": {
+      "description": "**Engage when** the COLOUR STRUCTURE itself is the question — the number of independent colour structures, the colour matrix / factors of the squared ME, leading- vs full-colour; when a model carries an exotic colour rep (sextet, epsilon/diquark, colour-octet); when a colourless/EW-only process should collapse to a trivial basis (ColorOne); on a colour-flow/ICOLUP symptom at LHE-write (\"failed to reduce to color indices\"). Rarely the first dispatch. **In slice:** ColorBasis/colorize, ColorMatrix, color_algebra primitives, color_flow_decomposition. **Not mine:** helicity amplitudes + where the basis is squared (helas-amplitude); diagram enumeration; loop colour (madloop); runtime LC truncation (mc-integration); the addmothers.f error routine + leshouche.inc (output).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-color-decomposition-consultant.md}\n\n{file:../.claude/agent-memory/ma-color-decomposition-consultant/MEMORY.md}"
+    },
+    "ma-coupling-order-consultant": {
+      "description": "**Engage when** the amplitude must be POWER-COUNTED: an EFT/dim-6 interference-vs-square bin; an effective vertex on its OWN order (`QCD=0` won't remove it); a BSM model with NO orders (WEIGHTED auto-detect → lowest-weight SM/QCD, silently no BSM). The order's NAME is per-model — read it off. **In slice:** the order TOKENS + power counting: before `[` bounds the born amp, after `]` the squared ME; `=` means `<=`, not equality. Unsquared `==`/`>` need LoopOption=tree — every bracket rejects them EXCEPT `[tree=]`; `^2==`/`^2>` are rejected ONLY on the aMC@NLO route. **Not mine:** which tokens a bracket ACCEPTS — its routing (nlo-syntax); the per-model NP-per-insertion increment + which bin a coefficient lands in (eft — co-dispatch us); which diagrams survive (diagram-enumeration).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-coupling-order-consultant.md}\n\n{file:../.claude/agent-memory/ma-coupling-order-consultant/MEMORY.md}"
+    },
+    "ma-delphes-interface-consultant": {
+      "description": "**Engage when** you need detector-level objects — reco jets, b-tags, isolated leptons, MET — a detector sim ON TOP of showered events; when no detector output appeared: the EXISTENCE of `Cards/delphes_card.dat` IS the on/off switch (absent ⇒ silent no-op everywhere); Delphes also needs a shower (selecting it silently promotes it ON); when geometry matters (unedited ⇒ silently CMS; `set delphes_card` takes only default/atlas/cms). **In slice:** do_delphes, Delphes/PGS/trigger templates, STDHEP/HepMC handoff, delphes_path (bundled ./Delphes), NLO non-auto-chain. **Not mine:** Delphes internals (jet algorithms, b-tag/isolation, resolution); showering (pythia8); analysing the output (MA5/Rivet); cuts on the generation, pre-reconstruction (kinematic-cuts); building Delphes (installation).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-delphes-interface-consultant.md}\n\n{file:../.claude/agent-memory/ma-delphes-interface-consultant/MEMORY.md}"
+    },
+    "ma-diagram-enumeration-consultant": {
+      "description": "**Engage when** the graph MG actually built is in doubt — a diagram count or topology that isn't what was expected; a coupling ZEROED in the param card to switch a channel off (enumeration keys on vertex PRESENCE, not value — the count is UNCHANGED; only removing the vertex, e.g. a restrict card, does that); \"No amplitudes generated\" from an over-constrained line; a multiparticle line whose combinations are silently dropped (expansion + zero-diagram drop happen HERE, not at parse); an inclusive line vs an explicit decay chain. **In slice:** `DiagramTag`, mirrors, decay-chain prohibitions, the `--diagram_filter`→`remove_diag` hook, `leg['state']`=final/initial (NOT s/t). **Not mine:** filter OPERATOR semantics (diagram-filter), HELAS build (helas-amplitude), loop enumeration (madloop).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-diagram-enumeration-consultant.md}\n\n{file:../.claude/agent-memory/ma-diagram-enumeration-consultant/MEMORY.md}"
+    },
+    "ma-diagram-filter-consultant": {
+      "description": "**Engage when** a final state must be attributed to — or shielded from — one intermediate: isolate what a propagator mediates, veto another, or strip the resonant piece so it can't double-count a production×decay sample (`$` sets onshell=False → gForceBW=2 cuts its BW window). Traps: one `/` is a PARTIAL gate — EVERY internal propagator reaching that final state must be forbidden, or hybrids leak silently; `/` forbids INTERNAL propagators only, never external legs; any operator breaks the gauge-invariant sum → silent gauge dependence, no warning. **In slice:** `/ $ $$ > >` — parse, and HOW they constrain enumeration, through to gForceBW. **Not mine:** forcing a topology via `,` (chain-decay; onshell TRUE), the `--diagram_filter` hook (diagram-enumeration), `bwcutoff` (bw-window).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-diagram-filter-consultant.md}\n\n{file:../.claude/agent-memory/ma-diagram-filter-consultant/MEMORY.md}"
+    },
+    "ma-eft-consultant": {
+      "description": "**Engage when** a deviation is parameterised by higher-dim operators and a *bin* must be picked — interference (linear) vs quadratic. The order token is NOT portable across EFT UFOs: the per-insertion increment is model-specific (+2 puts interference at `NP^2==2`, quadratic at `==4`, odd bins EMPTY; +1 shifts both down) — read it off the model. The active restrict card can zero the coefficient you need (σ silently ≈ SM). **In slice:** EFT models + restrict cards; operator→block ID; the bin choice (isolate by the BSM order, never QED=0); EFT-NLO. **Not mine:** linear-vs-quadratic as physics (physics); the token grammar (coupling-order); whether a bracket ACCEPTS it — the aMC@NLO route rejects `^2==`, `[virt=]`/`[noborn=]` take it (nlo-syntax); UFO content (ufo); restriction; fks/madloop.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-eft-consultant.md}\n\n{file:../.claude/agent-memory/ma-eft-consultant/MEMORY.md}"
+    },
+    "ma-failure-mode-extractor": {
+      "description": "**In slice:** read the cascade trail of a `mg-deep-verify` run (regime, consultant returns, reviewer verdicts, blind-spot findings, probe deviations, Stage 5 reconcile, Stage 6 cycles) and identify **agent-system mistakes** worth caching as wiki pages so future sessions do not repeat them. One occurrence is enough; no recurrence gate. **Common redirects (non-exhaustive):** writing the wiki page itself (the owning consultant via update-mode dispatch from the lead); MadGraph facts or new traps that are not agent-self-critique (flag for the owning consultant — via `ma-wiki-write`, with a description naming the trap); cosmetic corrections (skip — write only on a behavioural lesson).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-failure-mode-extractor.md}"
+    },
+    "ma-fks-consultant": {
+      "description": "**Engage when** the real-emission/IR side of NLO is at stake: **\"Poles do not cancel\"** is MINE (the real-vs-virtual pole check); a flavour scheme at NLO (a massive b in 5F starves the g->bb~ real -> poles fail; 4FS fixes it); a missing real subprocess or (i,j) config; a surprising subprocess-dir count; resonant real overlap (tt~/tW); EW Sudakov. **In slice:** real-emission partitioning + splittings/(i,j) configs (silent dedup), soft classification (massless + even-spin), colour/charge-correlated Borns, `NoBornException`, IRPoleCheckThreshold (negative MASKS, does not fix), S- vs H-events. DR/DS is NOT stock FKS (MadSTR). **Not mine:** virtual evaluation (madloop); brackets (nlo-syntax); exporters (nlo-export); run card, launch, PDF/scale variation (amcatnlo); matching/merging (matching).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-fks-consultant.md}\n\n{file:../.claude/agent-memory/ma-fks-consultant/MEMORY.md}"
+    },
+    "ma-helas-amplitude-consultant": {
+      "description": "**Engage when** what the GENERATED ME computes is at issue, not which diagrams exist — a σ off by an exact factor (spin, initial-colour and identical-particle 1/n! all fold into one IDEN); Majorana fermions (fermion-flow clash, signs); which helicity combinations the ME enumerates at all. The emitted `matrix_*.f`/JAMP is writer-, flag- and gauge-selected — READ it, never predict from source defaults. **In slice:** WAVEFUNCTION recycling (identical-wavefunction dedup) + the helicity SUM the ME builds, JAMP + s/t-channel configs. **Not mine:** enumeration (diagram-enumeration); colour (color-decomposition); loop HELAS (madloop); the EMITTED HELAS routines + the stock HELAS library (aloha); HELICITY recycling — generated/disabled (output), good_hels/limhel at RUN time (mc-integration).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-helas-amplitude-consultant.md}\n\n{file:../.claude/agent-memory/ma-helas-amplitude-consultant/MEMORY.md}"
+    },
+    "ma-installation-consultant": {
+      "description": "**Engage when** a tool is absent, not found, or built without the option you need (Delphes, PY8, MA5, Rivet, LHAPDF, loop libs); when `install <tool>` fails — tokens are case-sensitive exact; when a build succeeded but its path never reached the config. **In slice:** do_install + target sets, HEPTools/vendor, `make_opts` + generic build flags, the `*_path` keys an install WRITES BACK into mg5_configuration.txt. **Not mine:** getting a MODEL onto disk — never an install target; `import model` auto-fetches it (ufo). How a config key RESOLVES / a stale path nulled (interface). What a set `*_path` MEANS for a run — is the tool offered, does the step fire — the DOWNSTREAM-TOOL slice (pythia8/delphes/MA5/rivet), NOT interface. PDF SETS (scales-pdf; I install the LHAPDF lib only).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-installation-consultant.md}\n\n{file:../.claude/agent-memory/ma-installation-consultant/MEMORY.md}"
+    },
+    "ma-interface-consultant": {
+      "description": "**Engage when** MG5 did not do what you typed: a `set` did not take; a menu silently forced a different choice; a run-card parameter is invisible in the editor (hidden block — `update <block>` reveals it); a config key resolves to a path you never set, or a `*_path` you DID set is silently ignored (startup validation NULLS a stale path). Releases run `python -O` — error text/menu visibility differ from dev. **In slice:** card editing (`set`/`update`, hidden-param reveal), `mg5_configuration.txt` RESOLUTION, ControlSwitch MACHINERY, `PLUGIN/` loading. **Not mine:** what a card value *means* (card slices); a value overridden at launch (launch); BUILDING a tool + the `*_path` it writes back (installation); is a tool OFFERED, does its step FIRE — that tool's slice (pythia8/delphes/MA5/rivet).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-interface-consultant.md}\n\n{file:../.claude/agent-memory/ma-interface-consultant/MEMORY.md}"
+    },
+    "ma-kinematic-cuts-consultant": {
+      "description": "**Engage when** an acceptance/fiducial window must be imposed on the PARTON-level final state of an **LO** run — the LO run_card cut block is MINE. Traps: `cut_decays=False` (the DEFAULT) SILENTLY exempts a chain decay's product legs from generic per-particle cuts, so a \"fiducial\" sigma comes out too big (arrow form keeps them); generic ptX/etaX/drXY skip heavy states (setcuts.f's pmass gate) and unclassified PDGs, so cutting a t/W/Z/H/Z' needs the PDG-specific `pt_min_pdg`/`mxx_min_pdg`. **In slice:** the LO run_card cut block, check_validity, setcuts.f/cuts.f, the smin floor. **Not mine:** NLO cuts — own names, defaults, IR-safety (amcatnlo); the `from_decay` derivation `cut_decays` keys on (bw-window; the cut APPLICATION is mine); scales/PDF (scales-pdf); post-reco cuts (delphes).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-kinematic-cuts-consultant.md}\n\n{file:../.claude/agent-memory/ma-kinematic-cuts-consultant/MEMORY.md}"
+    },
+    "ma-launch-consultant": {
+      "description": "**Engage when** a run must be driven to completion, or it disobeyed the card you wrote: it stops short of the events requested (σ is still valid — that shortfall is unweighting-side); more statistics are needed than one launch yields; a parameter grid must be swept; it should ship as a gridpack or go to a batch queue; a card value was silently overridden at launch; a gridpack run goes quiet / single-core / skips refine. **In slice:** LO MadEvent launch — survey/refine/combine, `multi_run`, run_card `scan:`, gridpacks, cluster/multicore, nevents/iseed, the AskRun menu, banner/LHE header. **Not mine:** the σ estimator / VEGAS grid / accuracy (mc-integration); channel + propagator mappings (phase-space); NLO launch (amcatnlo); card *content* (card slices); run-time systematics (systematics).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-launch-consultant.md}\n\n{file:../.claude/agent-memory/ma-launch-consultant/MEMORY.md}"
+    },
+    "ma-madanalysis5-interface-consultant": {
+      "description": "**Engage when** you want histograms, a cutflow or a recast over ALREADY-GENERATED events via MG's MA5 cards — parton level (LHE, pre-shower) or hadron level (post-shower); and when MA5 produced NOTHING — three silent gates: `madanalysis5_path` nulled to None (never offered); the operative card absent (silently skipped); or the card present but the shipped `skip_analysis` default (INFO only — present ≠ active). **In slice:** do_madanalysis5_parton/_hadron → run_madanalysis5, MadAnalysis5Card + compat gate. I ANALYSE events; I never produce them. **Not mine:** MA5 internals (analysis logic, recasting, observables); PRODUCING the events I read — the shower (pythia8); cuts that shape the generation (kinematic-cuts; MA5 selections never change σ); delphes; rivet; installing it (installation).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-madanalysis5-interface-consultant.md}\n\n{file:../.claude/agent-memory/ma-madanalysis5-interface-consultant/MEMORY.md}"
+    },
+    "ma-madloop-consultant": {
+      "description": "**Engage when** the virtual/one-loop amplitude itself is at stake: a loop-induced process (no Born) at generation or runtime; loop diagrams silently dropped or fewer than expected; unstable loop points or virtual precision; the reduction library matters (CutTools/Ninja/Collier); MadLoop init/filters; checking a loop ME (stability/timing). **In slice:** loop-diagram enumeration; R2 + UV + wavefunction-renorm CTs; OPP/TIR reduction + library selection; `do_initMadLoop`, helicity/loop filters, DP->QP escalation; PrecisionVirtualAtRunTime (tightened by DECREASING it); Furry + non-perturbating-loop dropping; `has_born=False` reroutes every layer. **Not mine:** brackets (nlo-syntax); IR-pole cancellation + real emission (fks); emission (nlo-export); run card (amcatnlo); loop models (nlo-model).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-madloop-consultant.md}\n\n{file:../.claude/agent-memory/ma-madloop-consultant/MEMORY.md}"
+    },
+    "ma-madspin-interface-consultant": {
+      "description": "**Engage when** the decay happens AFTER the matrix element, on generated events: a heavy resonance decayed with spin correlations kept but without the ME cost of a chain — and the only route when production is perturbed/NLO, where generate-line chains are rejected; a decay spliced onto an existing LHE; a rate that then carries a BR factor whose denominator is the total width from the LHE banner's param_card (zero width = division edge). **In slice:** `MadSpinOptions` (`spinmode` full/madspin/none/onshell — full != madspin; `BW_cut`=-1 inherits run-card bwcutoff), `do_decay` grammar (comma is NOT a separator; `^2` rejected), LO-vs-NLO mode gating. **Not mine:** MadSpin's internal decay.py sampling/polarization; generate-line chains (chain-decay); `bwcutoff` (bw-window); widths (madwidth).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-madspin-interface-consultant.md}\n\n{file:../.claude/agent-memory/ma-madspin-interface-consultant/MEMORY.md}"
+    },
+    "ma-madwidth-consultant": {
+      "description": "**Engage when** a width is a consequence of the model, not a number you were handed — a BSM resonance, a benchmark point; uncomputed it stays 0.0 (zero-width propagator). And when a mass or coupling was edited: the stored width is STALE — nothing recomputes it, nothing warns. Each chain parent needs its own width for its BW; a tiny partial width / BR=0 fingerprints a coupling the benchmark zeroed. **In slice:** `compute_widths`/`calculate_decay_widths` from EVERY entry (MG5 REPL, MadEvent, the launch card editor's `DECAY <pid> auto` trigger), the `mg5decay` enumeration→survey engine, AND the `--nlo`/`auto@NLO` route to external `smwidth`. **Not mine:** how a width is stored in the card (param-card); off-shell BW range (bw-window); `decays.py` (ufo); MadSpin's decays (madspin-interface).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-madwidth-consultant.md}\n\n{file:../.claude/agent-memory/ma-madwidth-consultant/MEMORY.md}"
+    },
+    "ma-matching-consultant": {
+      "description": "**Engage when** several jet multiplicities must be merged without double-counting or gaps (LO+PS or NLO+PS); when a merging scale must be chosen or *varied*. Trap: `ickkw=1`+`xqcut=0` validates yet applies no cut. **In slice:** the merging SCHEME an `ickkw` value selects (LO 0/1 = MLM; NLO 0/3/4/-1 = none/FxFx/UNLOPS/jet-veto) and the scale it needs: `xqcut` (**LO-only** — the FxFx merging scale is shower_card `Qcut`), ktdurham/ptlund (CKKW-L), the PY8 qCut bridge. **Not mine:** the REST of the NLO run card — cuts, scales, beams, shower engine (amcatnlo; `ickkw` is a key in ITS card, the scheme it selects is MINE — co-dispatch us for FxFx); PY8's shower/merging *execution* (pythia8); μR/μF/PDF variation of a matched run (systematics; *merging-scale* variation is mine).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-matching-consultant.md}\n\n{file:../.claude/agent-memory/ma-matching-consultant/MEMORY.md}"
+    },
+    "ma-math-consultant": {
+      "description": "**Engage when** the task turns on a standalone symbolic step you cannot afford to get wrong: an identity or rearrangement to confirm, a limit / threshold / asymptotic or series expansion, a dimensional-balance check, sign / signature / conjugation bookkeeping, whether two forms of a formula are equal, or a multi-step derivation whose internal consistency is load-bearing. **In slice:** pure math by explicit derivation, sympy when non-trivial — the exception to source-as-only-truth. ma-math-reviewer: same domain, challenger role. **Not mine:** whether the formula is physically valid here (physics); the final number (numerics); MadGraph syntax / source / cards (owning slice). Algebra embedded in authoring a slice's own value stays with that slice — only a standalone derivation comes here.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-math-consultant.md}\n\n{file:../.claude/agent-memory/ma-math-consultant/MEMORY.md}"
+    },
+    "ma-math-reviewer": {
+      "description": "**In slice:** pure mathematical reasoning — algebraic manipulation, dimensional analysis, limit-taking, sign / signature handling, formula consistency, symbolic simplification. Identical domain to ma-math-consultant; different role (adversarial verification rather than first-pass authoring). Returns APPROVED / NEEDS REVISION / WARNING. Tool-optional — use sympy via Python when symbolic evaluation is non-trivial. **Common redirects (non-exhaustive):** MadGraph implementation (syntax, source mechanics, run_card knobs) — those belong to consultants. Whether the chosen physics formula applies in this regime goes to ma-physics-reviewer; numerical evaluation of a final value goes to ma-numerics-reviewer.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-math-reviewer.md}"
+    },
+    "ma-mc-integration-consultant": {
+      "description": "**Engage when** the number a run produced cannot be trusted or will not tighten: the error bar stops shrinking, χ²/dof is bad, the requested accuracy is never reached, re-runs disagree, a channel is flagged suspect (EPS/UPS), weights or their normalisation look wrong, or a tail must be biased. **LO MadEvent only**: an NLO run that will not converge is MINT/`req_acc` (amcatnlo), not this grid. **In slice:** VEGAS grid + σ/error estimator, refine logic, the σ/χ² combination ladder, suspect/negative-weight indicators, event_norm + LHE weight norms, run-time helicity recycling. **Not mine:** the loop-ME instability *behind* an EPS/UPS (madloop/fks); an unmapped peak behind a bad channel (phase-space); driving the run / \"not enough events\" (launch); generating *without* recycling (output).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-mc-integration-consultant.md}\n\n{file:../.claude/agent-memory/ma-mc-integration-consultant/MEMORY.md}"
+    },
+    "ma-model-loader-consultant": {
+      "description": "**Engage when** a *label* in the process line carries physics: `l+`/`l-` are e,μ ONLY (τ excluded) while `vl` DOES include ν_τ; default `p`/`j` carry NO photon and are 4-flavour (massive b), so a b-initiated / 5-flavour reading needs a massless-b restriction. Also: a broad/off-shell resonance wanting the complex-mass scheme (a global `set`, not a run-card knob); grafting a BSM plugin on (`add model`). `import model` ≠ the UFO on disk. **In slice:** `do_import`/`import_model` — gauge, CMS, mdl_ prefix, Py2/V4 recovery, `add_default_multiparticles` and the default labels' content. **Not mine:** UFO content, AND getting the model onto disk — the model-DB auto-fetch behind `import model`, never an install (both ufo); restriction; `generate`/`define` (process-syntax); widths (madwidth).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-model-loader-consultant.md}\n\n{file:../.claude/agent-memory/ma-model-loader-consultant/MEMORY.md}"
+    },
+    "ma-nlo-export-consultant": {
+      "description": "**Engage when** the written NLO process directory is the question: NLO code that will not compile, or a library that did not link (CutTools/TIR/StdHEP); P*/V* subprocess dirs or their files not as expected; per-coupling-order split results at NLO (amp_split/split_orders); an NLO run with photon/dressed-lepton/UPC beams (the PDF-call writer); an external OLP (GoSam/BLHA). **In slice:** the FKS/loop exporters (base vs the DEFAULT *optimized* one -- find the override first), Template/NLO copying, the P/V layout + which def writes which file, amp_split/orderstag, finalize, output_dependencies. **Not mine:** the reduction ALGORITHM/MadLoop runtime (madloop) -- I only *write* the CT/TIR/COLLIER interface files; FKS physics (fks); brackets (nlo-syntax); run card (amcatnlo); LO output (output).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-nlo-export-consultant.md}\n\n{file:../.claude/agent-memory/ma-nlo-export-consultant/MEMORY.md}"
+    },
+    "ma-nlo-model-consultant": {
+      "description": "**Engage when** a loop/NLO correction needs a model that can supply it: any bracketed or loop-induced process (the LO model usually cannot); a loop running THROUGH effective vertices; an EFT/SMEFT/BSM model at NLO — loop-capable? which restrict card? Co-dispatch with nlo-syntax on any bracketed line: `sm` is LO-only (it auto-upgrades to loop_sm), and a bracket on a non-loop-capable model simply fails. **In slice:** loop capability = `perturbative_expansion>0`, NOT CT-file presence; R2+UV declarations. The bundled loop-capable set DRIFTS — `ls models/` and scan, never recite one. **Not mine:** evaluating loops (madloop); UFO content, AND getting the model onto disk — `import model` auto-fetches it, never an install (both ufo); restriction; brackets (nlo-syntax); EFT power counting (eft).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-nlo-model-consultant.md}\n\n{file:../.claude/agent-memory/ma-nlo-model-consultant/MEMORY.md}"
+    },
+    "ma-nlo-syntax-consultant": {
+      "description": "**Engage when** an NLO/one-loop correction is wanted; a process with NO Born, reachable only via a loop; a squared-order/interference bin to isolate under a bracket. Co-dispatch amcatnlo (the run) + nlo-model (an LO-only model can't be bracketed). **In slice:** the `[...]` brackets -> LoopOption/HasBorn, and WHICH interface a line routes to — hence which order tokens it takes. Unsquared `==`/`>` die under every bracket EXCEPT `[tree=]` (the only one still LoopOption=tree). `^2==`/`^2>` die ONLY on the aMC@NLO route (`[QCD]`/`[real=]`/`[LOonly=]`) — `[virt=]` (MadLoop) and `[noborn=]` (tree) both take them. Unset orders fill an unbounded sentinel, NOT 0. **Not mine:** a token's MEANING / power counting (coupling-order); loop eval (madloop); IR poles (fks); nlo-export; run card (amcatnlo).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-nlo-syntax-consultant.md}\n\n{file:../.claude/agent-memory/ma-nlo-syntax-consultant/MEMORY.md}"
+    },
+    "ma-numerics-consultant": {
+      "description": "**Engage when** the task turns on a number that must be right: evaluate a formula to a value, independently reproduce a claimed number from its inputs, an order-of-magnitude or ratio check (Γ/M, a suppression), a unit conversion, uncertainty propagation — or a load-bearing constant (mass, coupling, PDG value) about to be quoted from memory. **In slice:** tool-grounded computation — every value from `python`, every constant from a cited primary source; head-math forbidden. Exception to source-as-only-truth. ma-numerics-reviewer: same domain, challenger role. **Not mine:** MadGraph runtime numbers — a launch σ, a diagram count (ma-probe / the owning slice); is the formula physically right (physics); is the algebra right (math); arithmetic inside a slice's own value-authoring stays there.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-numerics-consultant.md}\n\n{file:../.claude/agent-memory/ma-numerics-consultant/MEMORY.md}"
+    },
+    "ma-numerics-reviewer": {
+      "description": "**In slice:** numerical evaluation — every cited or computed number recomputed via `python`. Identical domain to ma-numerics-consultant; different role (adversarial verification rather than first-pass authoring). Returns APPROVED / NEEDS REVISION / WARNING with claimed-vs-computed tables. Tool-grounded execution is the discipline; head-math arithmetic is forbidden. **Common redirects (non-exhaustive):** MadGraph implementation (syntax, source mechanics, run_card knobs) — those belong to consultants. Whether the formula is physically correct goes to ma-physics-reviewer; whether the algebraic manipulation is correct goes to ma-math-reviewer.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-numerics-reviewer.md}"
+    },
+    "ma-output-consultant": {
+      "description": "**Engage when** the question is what `output` wrote, or the process dir must be **regenerated** because a choice is fixed at generation time and no card edit undoes it: helicity recycling (run_card `hel_recycling=False` does NOT cure a compile-time `Line truncated`; only `output --hel_recycling=False` does), its auto-disable for a spin-3/2 or spin-2 model. Also when the deliverable is code, not events (standalone/CPP/GPU/PY8). **In slice:** exporter/format selection + flag routing, subprocess grouping, finalize (proc_characteristics). **Not mine:** the recycler *itself* — good-hel determination + the Fortran rewrite run at launch (mc-integration); I own only whether it is *generated*, and disabling it. The ALOHA algorithm + the HELAS routines it emits (aloha); NLO emission (nlo-export).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-output-consultant.md}\n\n{file:../.claude/agent-memory/ma-output-consultant/MEMORY.md}"
+    },
+    "ma-param-card-consultant": {
+      "description": "**Engage when** a number you set must reach the matrix element — a mass, width, mixing angle, Wilson coefficient — above all when it appears not to take. Three causes: internal/derived (never read — sm MW); rule-fixed by the restriction template; restriction-pruned (ABSENT from card AND ident_card — a hand-add is inert). Also when an edit leaves a DERIVED quantity silently stale: MSSM has no spectrum generator, so NMIX is never recomputed from M1/M2/μ/tanβ; a width survives a mass edit. **In slice:** the operative `Cards/param_card.dat` — SLHA I/O, rules, scans, the UFO→restriction→output→user→`.inc` chain. **Not mine:** computing a width (madwidth); restriction (restriction); `parameters.py` (ufo); `bwcutoff` (bw-window). aS: card holds it, the PDF overrides it run-side (scales-pdf).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-param-card-consultant.md}\n\n{file:../.claude/agent-memory/ma-param-card-consultant/MEMORY.md}"
+    },
+    "ma-phase-space-consultant": {
+      "description": "**Engage when** the diagram-aware integrator decides whether sigma comes out right, or at all: the per-diagram amp2 channel weight vanishes while the total ME does not (pure-quadratic/interference-only EFT bins) -> \"All amp2 are zero...\" STOP 1, fixed with `sde_strategy`; a forced s-channel resonance whose sigma scales as 1/Gamma_total, so a stale param-card width silently rescales the rate; cuts so tight almost no phase-space point passes (none-pass abort); a topology needing the right channel + BW/collinear/soft mapping. **In slice:** ICONFIG channels (configs.inc/symfact), set_peaks -> gen_s/transpole propagator maps, cut_bw accept-reject. **Not mine:** VEGAS points/iterations/convergence (mc-integration); bwcutoff semantics (bw-window); cut values (kinematic-cuts); NLO/FKS PS (fks).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-phase-space-consultant.md}\n\n{file:../.claude/agent-memory/ma-phase-space-consultant/MEMORY.md}"
+    },
+    "ma-physics-consultant": {
+      "description": "**Engage when** the call needs a physics judgment source cannot settle. First move on any non-trivial task: name the regime the keywords hide (off-shell, sub-threshold, loop-induced, EFT power count). Then — is this benchmark sensible (a point fixed by masses can zero the coupling the signal needs); is this rate plausible (an LO σ vs a quoted NNLO); does this channel dominate; is the approximation safe (NWA, auto-width, EFT range); what the physics demands of the window, observable, cuts. **In slice:** first-principles physics — the exception to source-as-only-truth. ma-physics-reviewer: same domain, challenger. **Not mine:** what MadGraph does (owning slice); running it (ma-probe); standalone algebra (math) or a value (numerics); physics inside a slice's own value-authoring stays there.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-physics-consultant.md}\n\n{file:../.claude/agent-memory/ma-physics-consultant/MEMORY.md}"
+    },
+    "ma-physics-reviewer": {
+      "description": "**In slice:** pure first-principles physics — formula validity, regime classification, approximation validity, kinematic feasibility, named load-bearing assumptions, literature-cited values. Identical domain to ma-physics-consultant; different role (adversarial verification rather than first-pass authoring). Returns APPROVED / NEEDS REVISION / WARNING. **Common redirects (non-exhaustive):** MadGraph implementation (which diagrams a syntax generates, what `decayBW.inc` writes, what `set_peaks` does at runtime, run_card knobs, source-walk findings) — those belong to consultants. Algebraic manipulation goes to ma-math-reviewer; numerical evaluation goes to ma-numerics-reviewer.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-physics-reviewer.md}"
+    },
+    "ma-polarization-consultant": {
+      "description": "**Engage when** a helicity state is part of the physics, not just the final state — a longitudinal/transverse fraction, longitudinal VV scattering, a polarized top/W/Z sample, a spin-analyser, or an LHE SPINUP reading (0 on a vector = longitudinal). Traps: `{L}` on a vector is LEFT (−1), NOT longitudinal — that is `{0}` (warning only); a polarized + unpolarized copy of one PID (`p p > Z{T} Z`) is ambiguous and voids the 1/n! factor; a massless boson whose only pol is `{0}` is stripped → a bare \"No amplitudes generated\" naming no polarization. **In slice:** `{T,L,R,A,G,H,Q,W,S,0,±N}` letter→helicity, the validation gates (incl. NLO/massive), `check_polarization`. **Not mine:** polarized-ME computation (helas-amplitude), runtime helicity selection (mc-integration), MadSpin (madspin).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-polarization-consultant.md}\n\n{file:../.claude/agent-memory/ma-polarization-consultant/MEMORY.md}"
+    },
+    "ma-probe": {
+      "description": "**Engage when** you hold a candidate setup and an expectation about it, and want reality to falsify it — I act, where the consultants reason. Route to me: does the parser accept this spec; how many diagrams it really produces; what the generated code contains (a vertex you meant to exclude, a BW flag, a card default); does `launch` survive; is σ non-zero, does it move as expected across configurations; warnings you'd only see by running. **In slice:** adversarial runtime check (/mg-probe frames it) — bring a target state; I design the runs that break it, and report matches/deviates plus ones I derive. **Not mine:** \"find anything wrong\" with no expectations (bare sanity check only); a seconds-long lookup you can run inline; source-walking, authoring a value, the verdict — yours.",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-probe.md}\n\n{file:../.claude/agent-memory/ma-probe/MEMORY.md}"
+    },
+    "ma-process-syntax-consultant": {
+      "description": "**Engage when** a process line must be written into a model nobody has inspected — a BSM/UFO name taken from a paper or PDG table, not from the model, aborts at PARSE before any diagram exists; when the model's contents must be looked up, not recalled (`display particles/parameters`); when one line is re-consumed by a second command (`define`, MadSpin, reweight, `check`) whose tokenizer diverges; or to validate a built process numerically (`check gauge/lorentz/perm`). **In slice:** `extract_process`/`do_add`, name→PDG resolution, `define`, `@N`, `!a!`, the `--diagram_filter` CLI-flag strip (EFFECT is diagram-enumeration's). **Not mine:** the MEANING of what parses — `/ $ $$ > >` (diagram-filter), orders (coupling-order), `{pol}` (polarization), `[...]` (nlo-syntax), `,` (chain-decay).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-process-syntax-consultant.md}\n\n{file:../.claude/agent-memory/ma-process-syntax-consultant/MEMORY.md}"
+    },
+    "ma-pythia8-interface-consultant": {
+      "description": "**Engage when** a parton-level sample must be SHOWERED/hadronised into hadron-level events by PY8; when the shower silently did not run — PY8 is offered only if `pythia8_path` resolves, and the chained `shower --no_default` no-ops without `Cards/pythia8_card.dat`. **In slice:** do_pythia8/do_shower, PY8 + shower cards and their setter-precedence ladder, matched-σ readback. I PRODUCE showered events (up to HepMC); I never analyse them. **Not mine:** PY8 internals (shower/hadronisation/tunes); ANALYSING what I produce — histograms/cutflow/recast (madanalysis5), Rivet/Contur (rivet), detector reco (delphes); WHICH merging scheme + scale (matching); a NON-PY8 engine for an NLO sample (`parton_shower` — amcatnlo); parton-level cuts (kinematic-cuts); installing PY8 (installation).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-pythia8-interface-consultant.md}\n\n{file:../.claude/agent-memory/ma-pythia8-interface-consultant/MEMORY.md}"
+    },
+    "ma-restriction-consultant": {
+      "description": "**Engage when** the signal rides on a coupling the active restriction may have zeroed — zeroing REMOVES the vertex, not shrinks it: zero diagrams, and the order it carried stops being valid. Default `sm` zeroes the e/μ/c Yukawas (no H→μμ) and all Wolfenstein (CKM diagonal); an EFT default card can zero every Wilson coeff. Also when a parameter you must set or scan was converted external→internal (0 or 1) or merged away: gone at import; no card edit resurrects it — fix at load time. **In slice:** `restrict_*.dat` × `RestrictModel` — vertex pruning, external→internal, identical merges, auto-width restore. It drops NO particle (a vanished one = FD-gauge Goldstone merge, model-loader). **Not mine:** UFO declarations (ufo); import/gauge (model-loader); the card (param-card); widths (madwidth).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-restriction-consultant.md}\n\n{file:../.claude/agent-memory/ma-restriction-consultant/MEMORY.md}"
+    },
+    "ma-rivet-interface-consultant": {
+      "description": "**Engage when** you want a Rivet analysis (published or `MC_*`) or a Contur limit run on generated events (truth/hadron level); when Rivet is not offered or silently did not run — four gates: `rivet_path` needs a real `<path>/bin/rivet` (usually NOT installed), the switch needs rivet_path AND PY8, and never auto-picks Rivet; card-editor membership; `Cards/rivet_card.dat` existence (absent ⇒ silent skip); and which analyses run (`[default]` → curated MC_* set). **In slice:** do_rivet, rivet_card + analysis list, HepMC handoff, run-now vs deferred postproc, Contur, rivet_path/yoda. **Not mine:** Rivet/Contur internals (analysis routines, histogramming, observables, limits); the shower behind the HepMC (pythia8); detector (delphes; Rivet uses truth events); MA5; the install (installation).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-rivet-interface-consultant.md}\n\n{file:../.claude/agent-memory/ma-rivet-interface-consultant/MEMORY.md}"
+    },
+    "ma-scales-pdf-consultant": {
+      "description": "**Engage when** the rate's normalisation hangs on the QCD scale or the beams' parton content: choosing muR/muF (fixed vs dynamical); a scale/PDF set but not what runs (superseded later, or accepted by the card then ignored by the Fortran); a beam that is NOT a plain proton (photon/UPC, lepton beams with EVA/iEVA W/Z partons, heavy-ion, no-PDF), lpp/pdlabel coherence; PDF/alpha_s identity (`pdlabel=lhapdf` gates LHAPDF linking, no fallback; the PDF's alphas(MZ) OVERWRITES param-card asmz). **Scope: LO** run_card block + LO Fortran. At NLO: a DIFFERENT card class — **amcatnlo owns the NLO central scale/PDF *and* beams**. Scale/PDF *variation*, LO or NLO, is systematics'. **Not mine:** cut values (kinematic-cuts); xqcut (matching); reweighting / PDF-error sets (systematics).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-scales-pdf-consultant.md}\n\n{file:../.claude/agent-memory/ma-scales-pdf-consultant/MEMORY.md}"
+    },
+    "ma-systematics-consultant": {
+      "description": "**Engage when** an uncertainty band is wanted on a rate — μR/μF, PDF or αs, inline or on an existing LHE; when the *same* events must be re-weighted to another parameter point, model or EFT operator instead of re-generated; or the weights come out missing or wrong. It fails SOFT — no lhapdf6, a fetch failure, a non-proton beam or OLP≠MadLoop degrade it silently, so \"did it run?\" is read off the weights. **In slice:** `Systematics` (weight kernels, dyn scales), `ReweightInterface`/reweight_card, run_card `use_syst`/`systematics_arguments` + the NLO reweight params (`sys_*` SysCalc is RETIRED). **Not mine:** the *central* scale/PDF choice — at LO (scales-pdf), at NLO a different card class (amcatnlo); the NLO integrator's own 1001 weights (amcatnlo); merging-scale variation (matching).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-systematics-consultant.md}\n\n{file:../.claude/agent-memory/ma-systematics-consultant/MEMORY.md}"
+    },
+    "ma-ufo-consultant": {
+      "description": "**Engage when** whether the model *declares* a vertex at all is the question — an effective ggH/γγH in a renormalisable model. Presence is set by `vertices.py`, not the card: undeclared ⇒ zero diagrams; a card-zeroed coupling still generates (amp→0). Also: an input that is derived, not external (sm MW; Yukawa ≠ pole mass); **a model that is NOT on disk — `import model` auto-fetches it from the model DB; a model is never an `install` target**; a UFO that won't import (Py2, custom dir, gauge). **In slice:** the declared UFO files + `import_ufo` — the model-DB lookup/download AND the conversion into the Model; CT/loop grammar. **Not mine:** pruning/merging (restriction); import orchestration (model-loader); R2/UV requirements (nlo-model); operative card (param-card); PDG values (physics).",
+      "mode": "subagent",
+      "prompt": "{file:./cards/ma-ufo-consultant.md}\n\n{file:../.claude/agent-memory/ma-ufo-consultant/MEMORY.md}"
+    }
+  }
+}

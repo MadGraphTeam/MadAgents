@@ -1,0 +1,4 @@
+{
+  "autoMemoryEnabled": true,
+  "autoMemoryDirectory": "@@LEAD_MEMORY_ABS@@"
+}

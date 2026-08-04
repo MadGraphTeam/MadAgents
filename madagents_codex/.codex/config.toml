@@ -1,0 +1,50 @@
+# MadAgents — project config for Codex.
+# Generated into madagents_codex/.codex/config.toml by tools/render_codex.py.
+#
+# Codex reads this only in a TRUSTED project. Untrusted, it ignores the whole
+# .codex/ layer — including .codex/agents/ — and the 46 consultants simply do
+# not exist, with no error. The launcher and the installer both mark the
+# project trusted for that reason.
+#
+# --- Permissions: deliberately none -------------------------------------------
+# This file sets no sandbox mode and no permission profile, so a run gets Codex's
+# own defaults and asks before acting. That matches the Claude Code side, which
+# ships no settings.local.json permissions block, an empty disallowed_tools, and
+# no launcher flags — the shipped system pre-approves nothing, on either provider.
+#
+# What that costs is one click, once — not a prompt per run. Under the default
+# `workspace-write` sandbox `.codex/` is read-only (recursively), and a
+# consultant's slate lives in `.codex/agents/<name>.toml`, so the first
+# `/ma-wiki-write` asks. Add it to the allow list in that prompt and Codex writes
+# a prefix_rule to $CODEX_HOME/rules/default.rules, and future runs skip it.
+#
+# That persists because the launcher bind-mounts the host's CODEX_HOME, so the
+# rule outlives the container and applies to every run — nobody edits a config
+# file, and nothing here has to pre-approve anything. Slate writes go through
+# `.agents/skills/ma-wiki-write/scripts/write_slate.py`, invoked by that stable
+# relative path from the project root, so the rule generalises across instances.
+#
+# `codex exec` is the exception: a non-interactive run cannot surface a fresh
+# approval, so an unapproved action fails rather than asking. That is the case
+# for --dangerously-bypass-approvals-and-sandbox, the same explicit per-run
+# decision the README frames for --dangerously-skip-permissions.
+#
+# Do not add a permission profile here to skip the first prompt: pre-approving
+# writes is a posture change, it would make Codex the only place in the repo that
+# grants anything up front, and it would apply to every install rather than to
+# the machine whose owner clicked once.
+#
+# --- No fan-out cap either ----------------------------------------------------
+# `[agents] max_threads` would cap concurrently open agent threads, and an
+# earlier draft set it to 8 to mirror lead-discipline.md's "cap the concurrent
+# fan-out (~6-8) and drain a wave before launching the next". It is gone: the
+# Claude Code side has no such setting — Claude Code does not expose one — so the
+# cap is prose the lead obeys, on both providers. Codex picks its own default.
+#
+# If you do add one, spell it `max_threads`. Current docs name
+# `max_concurrent_threads_per_session` and call this the legacy alias, but Codex
+# 0.137 does not know the new name, and an unrecognised key under `[agents]` is
+# read as a custom agent role — so the file is rejected ("expected struct
+# AgentRoleToml") and the whole roster silently disappears.
+#
+# So this file intentionally sets nothing at all. It exists to say why.

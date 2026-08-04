@@ -1,0 +1,23 @@
+# MadAgents installer — project config for Codex.
+#
+# Codex reads this only in a TRUSTED project. Untrusted, it ignores the whole
+# .codex/ layer — including .codex/agents/ — so the install-verifier role simply
+# does not exist, with no error. Answer yes when Codex asks about this folder.
+#
+# --- Deliberately empty -------------------------------------------------------
+# No permission profile, no sandbox_mode, no approval_policy. The installer
+# writes into a folder the user names, on their own filesystem, as them — that is
+# exactly the kind of thing they should be asked about, and pre-approving it here
+# would grant it for every install on every machine rather than for the one the
+# user just agreed to.
+#
+# This matches the shipped system (madagents_codex/.codex/config.toml) and the
+# Claude Code side, neither of which pre-approves anything either.
+#
+# --- Also deliberately absent -------------------------------------------------
+# developer_instructions: silently ignored in a project-scoped .codex/config.toml
+# (verified — no warning is printed). The installer's brief reaches the session
+# through AGENTS.md instead, which auto-loads from the project root.
+#
+# [agents] max_threads: the installer spawns exactly one subagent, its verifier.
+# There is nothing to cap.

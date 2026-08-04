@@ -1,0 +1,23 @@
+name: madagents_opencode
+provider: opencode
+mount_madgraph_docs: false
+max_turns: null
+disallowed_tools: []
+# The lead's instructions are NOT appended by the launcher on opencode: they are
+# declared in .opencode/opencode.json's `instructions`, which opencode loads as
+# session context (and which, unlike a consultant's prompt, does not leak into
+# subagents). The file itself still ships at prompts/lead-discipline.md, bound
+# into the container at /output/prompts/ — `instructions` paths resolve from the
+# project root. See tools/render_opencode.py.
+append_system_prompt_file: null
+# No /agent_wikis bind: the wiki rides inside the /output project tree at
+# /output/.madagents/wiki/. Omitting the bind is what selects the in-output
+# wiki layout.
+extra_binds: []
+# On opencode the learned tier loads through {file:} interpolation — a
+# consultant's slate is pulled into its prompt from the same
+# .claude/agent-memory/<name>/MEMORY.md that Claude Code auto-loads, and the
+# lead's from .claude/lead-memory/MEMORY.md via `instructions`. There is no
+# harness setting to switch on; the key stays true to mean "this system has a
+# learned tier".
+auto_memory_enabled: true

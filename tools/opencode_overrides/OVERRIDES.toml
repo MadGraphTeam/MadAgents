@@ -1,0 +1,62 @@
+# opencode overrides — files whose *mechanism* differs, not just their paths.
+#
+# tools/render_opencode.py substitutes exactly one thing (CLAUDE.md -> AGENTS.md).
+# It needs so little because the learned tier stays where Claude Code keeps it:
+# every `.claude/agent-memory/<name>/MEMORY.md` sentence in the cards is still
+# true here. What that leaves is ma-doctor — the skill whose *subject* is the
+# harness — where a sentence can survive substitution and still be wrong.
+#
+# Note which of Codex's overrides are absent. ma-wiki-write, ma-reflect and
+# mg-study needed forking there because a slate had to be spliced into a role
+# file through a script. Here a slate is an ordinary markdown file at an
+# ordinary path, so those three skills are shipped verbatim — the clearest
+# measure of how much closer opencode sits to Claude Code.
+#
+# Each entry pins the SHA-256 of the canonical file the override was written
+# against. Edit the canonical file and the render FAILS until someone revisits
+# the override. That is the point — an override is a fork, and a silently stale
+# fork is how the providers drift apart.
+#
+# After folding a canonical change into an override, refresh its hash:
+#   python3 tools/refresh_override_hashes.py --manifest tools/opencode_overrides/OVERRIDES.toml
+
+
+# three trees to snapshot, a card split across two files, and a JSON roster that
+# fails whole rather than degrading
+[override.".claude/skills/ma-doctor/SKILL.md"]
+sha256 = "7da70163208f9965ced6a66701cde0354420647a637f5e03f2a9d68884062432"
+
+# the harness layout it reads, and where opencode keeps session history
+[override.".claude/skills/ma-doctor/analyst.md"]
+sha256 = "543b5f010f56cdd6e1b842b24483495f231f1c0b7d73e113c1b98b24a9cfedfd"
+
+# wholesale: the runtime's loading model is the subject of the file
+[override.".claude/skills/ma-doctor/cc-mechanics.md"]
+sha256 = "c372ed6c116471b6cc6800960c462089d8692db7889618dc06c237c6f47c3f9a"
+renames_to = ".claude/skills/ma-doctor/opencode-mechanics.md"
+
+# the bar this product is measured against, and who is likely reading it here
+[override.".claude/skills/ma-doctor/use-case.md"]
+sha256 = "1dd34da7f09cf4a8e09696a13ab566e89d78c782492f830871a2834546c00e7c"
+
+# the runtime it checks against — and `opencode debug` settles most claims offline
+[override.".claude/skills/ma-doctor/reviewers/cc-alignment.md"]
+sha256 = "bf0cf6edb92de1888395d474bdd153f9850b0e81a3270a62a0f2ad127b991b99"
+renames_to = ".claude/skills/ma-doctor/reviewers/opencode-alignment.md"
+
+# what it reviews, plus the two failure modes this provider has and CC does not
+[override.".claude/skills/ma-doctor/reviewers/edit-critic.md"]
+sha256 = "b61b28fb78c94469e8f41355f9f1cc558accde74ba5b255bfbe1b7938d27d95c"
+
+# the loading model it applies, and the portability grep's roots (three trees)
+[override.".claude/skills/ma-doctor/reviewers/surface-discipline.md"]
+sha256 = "c297ea831e0f39d7b19df16e3efd099281ccb84834da447da61a108c83f8da34"
+
+# the bar, restated for its own procedure
+[override.".claude/skills/ma-doctor/reviewers/use-case.md"]
+sha256 = "32e6f9e8db193205fd9f2b13780f3a9352e3c3d47dc359d0e7a85f3773757bfa"
+
+# the "in a harness like this" paragraph names surfaces this provider has not
+# (the rest of lessons/ is an exempt citation corpus — see render_opencode.py)
+[override.".claude/skills/ma-doctor/lessons/18-map-not-manual.md"]
+sha256 = "8b3b84ec51b82325a31d79467083447df8d2b0ffd5e0fab11343fb83b77aca44"

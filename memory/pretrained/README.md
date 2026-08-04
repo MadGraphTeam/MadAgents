@@ -24,7 +24,9 @@ the ordinary `claude` CLI on a Claude subscription or API credits.
 Nothing about operating Claude Code. The system's one harness principle — how to wait for a
 dispatched subagent rather than polling for it — is deliberately absent here: an Anthropic model
 already handles background subagents correctly, so stating it only spends context. If you point the
-session at a self-hosted model, use [`pretrained-local`](../pretrained-local) instead, which is this
+session at a self-hosted model, use [`pretrained-local-cc`](../pretrained-local-cc) or
+[`pretrained-local-opencode`](../pretrained-local-opencode) instead — whichever matches the CLI the
+run is built for. Each is this
 pack plus that principle.
 
 ## Provenance, stated plainly

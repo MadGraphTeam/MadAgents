@@ -71,7 +71,7 @@ From: node:22-trixie
     cd -
 
     # MadGraph (no fastjet/lhapdf6/pythia8/Delphes)
-    MG_VERSION="3.7.1"
+    MG_VERSION="3.7.2"
     MG_TAR="MG5_aMC_v${MG_VERSION}.tar.gz"
     wget -q "https://launchpad.net/mg5amcnlo/3.0/3.7.x/+download/${MG_TAR}"
     tar -xzf "${MG_TAR}" -C /opt/MG5_aMC --strip-components=1

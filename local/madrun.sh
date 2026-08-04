@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # MadAgents against a self-hosted model — see local/README.md.
 #
-#   ./local/madrun.sh                 start a session on your own endpoint
-#   ./local/madrun.sh --resume        forwarded to claude, as usual
+#   ./local/madrun.sh                 interactive: choose an existing run or
+#                                     start a new one, then launch it
+#   ./local/madrun.sh --list          list your runs and exit
+#   ./local/madrun.sh --new --memory pretrained-local-opencode --name qwen-study
+#   ./local/madrun.sh --fork run_dir/instances/qwen-study__<stamp>
+#   ./local/madrun.sh --resume        forwarded to the CLI, as usual
+#
+# Same menu as the repo-root ./madrun.sh, and the same runs: instances live in
+# run_dir/instances/ either way, and the BACKEND column says which start path a
+# run was built for. A run's backend is fixed when it is built, so resuming one
+# from here starts it however it was built — as does resuming it from there.
 #
 # Configure the endpoint in local/config.env (copy local/config.env.example).
 # Everything else — image, overlay, run instances, memory packs — is shared
