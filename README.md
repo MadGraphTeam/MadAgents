@@ -1,6 +1,7 @@
 # MadAgents
 
 [![arXiv](https://img.shields.io/badge/arXiv-2601.21015-b31b1b.svg)](https://arxiv.org/abs/2601.21015)
+[![arXiv](https://img.shields.io/badge/arXiv-2607.22813-b31b1b.svg)](https://arxiv.org/abs/2607.22813)
 
 This is the **official implementation** of **MadAgents**.
 
@@ -438,6 +439,18 @@ If you used MadAgents in your research, please cite us as follows:
     archivePrefix = "arXiv",
     primaryClass = "hep-ph",
     month = "1",
+    year = "2026"
+}
+```
+
+```bibtex
+@article{Diefenbacher:2026azr,
+    author = "Diefenbacher, Sascha and Plehn, Tilman and Schiller, Daniel and Schmal, Nikita",
+    title = "{Agentic Re-Casting using Agentic Re-Simulations}",
+    eprint = "2607.22813",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    month = "7",
     year = "2026"
 }
 ```
