@@ -5,7 +5,7 @@
 
 This is the **official implementation** of **MadAgents**.
 
-- 📄 Paper: [arXiv:2601.21015](https://arxiv.org/abs/2601.21015)
+- 📄 Paper: [arXiv:2601.21015](https://arxiv.org/abs/2601.21015), [arXiv:2607.22813](https://arxiv.org/abs/2607.22813)
 - 📦 Supplementary material: [`supplementary/`](supplementary)
 - 🗄️ Superseded releases: [`legacy/`](legacy)
 
